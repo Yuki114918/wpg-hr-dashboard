@@ -1091,6 +1091,12 @@
     totalBar.appendChild(totalLeft);
     var totalRight = el('div', 'svc-total-right'); totalBar.appendChild(totalRight);
     calcSec.appendChild(totalBar);
+
+    // ★ v5.9：生成服务清单 PDF 按钮
+    var pdfBtn = el('button', 'svc-pdf-btn');
+    pdfBtn.innerHTML = '📄 生成服务清单 PDF';
+    pdfBtn.addEventListener('click', generateServiceQuotePDF);
+    calcSec.appendChild(pdfBtn);
     wrap.appendChild(calcSec);
 
     // 模块筛选 + 作业模式筛选 + 搜索
@@ -1255,6 +1261,227 @@
     totalRight.innerHTML = '<div class="svc-total-val">' + displayVal + '</div><div class="svc-total-sub">' + displaySub + '</div>';
     var customWrap = document.querySelector('.svc-custom-wrap');
     if (customWrap) { if (feeType === 'custom') customWrap.classList.remove('hidden'); else customWrap.classList.add('hidden'); }
+  }
+
+  // ========== v5.9：生成服务报价清单 PDF ==========
+  function generateServiceQuotePDF() {
+    if (!window.jspdf || !window.jspdf.jsPDF) { alert('PDF 库未加载，请刷新页面重试'); return; }
+    if (state.selectedServices.size === 0) { alert('请先勾选至少一项服务再生成清单'); return; }
+
+    var JSPDF = window.jspdf.jsPDF;
+    var doc = new JSPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    var pageW = doc.internal.pageSize.getWidth();
+    var pageH = doc.internal.pageSize.getHeight();
+    var margin = 15;
+    var contentW = pageW - margin * 2;
+    var y = margin;
+
+    // ── 颜色定义 ──
+    var primaryColor = [79, 70, 229];     // indigo-600
+    var accentColor  = [220, 38, 38];      // red-600
+    var textDark     = [30, 41, 59];       // slate-800
+    var textMuted    = [100, 116, 139];    // slate-500
+    var lineLight    = [226, 232, 240];    // slate-200
+
+    // ── 1. 抬头区 ──
+    doc.setFillColor(...primaryColor);
+    doc.rect(0, 0, pageW, 42, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont(undefined, 'bold');
+    doc.text('HR 服务报价清单', pageW / 2, 18, { align: 'center' });
+
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'normal');
+    doc.text('大联大控股 · HR 共享服务中心（SDC）', pageW / 2, 27, { align: 'center' });
+
+    var today = new Date();
+    var dateStr = today.getFullYear() + '年' + (today.getMonth() + 1) + '月' + today.getDate() + '日';
+    doc.setFontSize(9);
+    doc.setTextColor(200, 210, 230);
+    doc.text('单号：WPG-HR-' + today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0') + '-' + String(Math.floor(Math.random() * 9000) + 1000), margin, 37);
+    doc.text('日期：' + dateStr, pageW - margin, 37, { align: 'right' });
+
+    y = 50;
+
+    // ── 2. 顾问信息卡片 ──
+    if (state.advisorPerson) {
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(margin, y, contentW, 18, 2, 2, 'F');
+      doc.setTextColor(...textDark);
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.text('专属顾问', margin + 5, y + 7);
+
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(...primaryColor);
+      doc.text(state.advisorPerson, margin + 5, y + 14);
+
+      var advProf = getAdvisorProfile(state.advisorPerson);
+      if (advProf && advProf.topMod) {
+        doc.setTextColor(...textMuted);
+        doc.setFontSize(8);
+        doc.text('主要强项：' + advProf.topMod, margin + 55, y + 14);
+      }
+      y += 23;
+    }
+
+    // ── 3. 服务明细表 ──
+    doc.setTextColor(...textDark);
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('服务明细', margin, y); y += 3;
+
+    // 表头
+    var colX = [margin, margin + 6, margin + 58, margin + 108, margin + 138, margin + 158];
+    var colW = [6, 52, 50, 30, 20, contentW - 158]; // 序号|名称|计费模式|单价|数量|小计
+
+    doc.setFillColor(241, 245, 249);
+    doc.rect(margin, y, contentW, 7, 'F');
+    doc.setTextColor(...textMuted);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'bold');
+    doc.text('#', colX[0] + 1, y + 5);
+    doc.text('服务名称', colX[1] + 1, y + 5);
+    doc.text('计费模式', colX[2] + 1, y + 5);
+    doc.text('单价', colX[3] + 1, y + 5);
+    doc.text('数量', colX[4] + 1, y + 5);
+    doc.text('小计', colX[5] + 1, y + 5);
+    y += 8;
+
+    // 按模块分组收集选中服务
+    var selectedList = [];
+    state.selectedServices.forEach(function(idx){
+      selectedList.push({ idx: idx, svc: QUOTE_SERVICES[idx] });
+    });
+    // 按 module 排序
+    selectedList.sort(function(a, b){ return (a.svc.module || '').localeCompare(b.svc.module || ''); });
+
+    var grandTotal = 0;
+    var currentModule = '';
+    selectedList.forEach(function(row, ri){
+      var s = row.svc;
+      var qty = state.serviceQuantities[row.idx] || 1;
+      var price = Number(s.price) || 0;
+      var subtotal = price * qty;
+      grandTotal += subtotal;
+
+      var modName = (s.module || '').replace(/服务模块$/, '');
+      if (modName !== currentModule) {
+        currentModule = modName;
+        // 模块分隔行
+        if (ri > 0) { y += 1; doc.setDrawColor(...lineLight); doc.line(margin, y, margin + contentW, y); y += 2; }
+        doc.setFillColor(238, 242, 255);
+        doc.rect(margin, y, contentW, 5, 'F');
+        doc.setTextColor(...primaryColor);
+        doc.setFontSize(7.5);
+        doc.setFont(undefined, 'bold');
+        doc.text('▎ ' + modName, margin + 2, y + 3.5);
+        y += 6;
+      }
+
+      // 数据行
+      if (y > pageH - 35) { doc.addPage(); y = margin; } // 分页
+
+      doc.setTextColor(...textDark);
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'normal');
+
+      doc.text(String(ri + 1), colX[0] + 1, y + 4);
+
+      // 名称（截断过长）
+      var name = (s.item || s.content || '').slice(0, 20);
+      doc.text(name, colX[1] + 1, y + 4);
+
+      // 计费模式标签
+      var pt = getPricingType(s);
+      doc.setTextColor(pt.color[0], pt.color[1], pt.color[2]); // hex to rgb approximation
+      doc.setFontSize(7);
+      doc.text(pt.label, colX[2] + 1, y + 4);
+
+      // 单价
+      doc.setTextColor(...textDark);
+      doc.setFontSize(8);
+      var specStr = (s.spec || '').trim();
+      var priceText = '¥' + price + (specStr ? '/' + specStr : '');
+      doc.text(priceText, colX[3] + 1, y + 4, { width: colW[3] - 2, align: 'right' });
+
+      // 数量
+      doc.text(String(qty), colX[4] + 2, y + 4, { align: 'center' });
+
+      // 小计
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(...accentColor);
+      doc.text('¥' + fmt(subtotal, 0), colX[5] + 1, y + 4, { width: colW[5] - 2, align: 'right' });
+
+      y += 6.5;
+    });
+
+    y += 3;
+
+    // ── 4. 费用汇总区 ──
+    doc.setDrawColor(...primaryColor);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, margin + contentW, y);
+    y += 3;
+
+    doc.setFillColor(250, 252, 255);
+    doc.roundedRect(margin, y, contentW, 22, 2, 2, 'F');
+
+    var feeType = state.feeType || 'total';
+    var displayVal, displaySub;
+    if (feeType === 'custom') { displayVal = '¥' + (state.customFee || '0'); displaySub = '自定义金额'; }
+    else if (feeType === 'monthly') { displayVal = '¥' + fmt(grandTotal / 12, 0); displaySub = '月均费用（' + state.selectedServices.size + '项 ÷ 12月）'; }
+    else { displayVal = '¥' + fmt(grandTotal, 0); displaySub = '已选 ' + state.selectedServices.size + ' 项服务'; }
+
+    doc.setTextColor(...textMuted);
+    doc.setFontSize(9);
+    doc.text('费用类型：' + ({ total:'服务报价总计', monthly:'月度预估费用', custom:'自定义金额' })[feeType] || '', margin + 5, y + 8);
+
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(...accentColor);
+    doc.text(displayVal, pageW - margin, y + 12, { align: 'right' });
+
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(...textMuted);
+    doc.text(displaySub, pageW - margin, y + 18, { align: 'right' });
+
+    y += 26;
+
+    // ── 5. 备注与条款 ──
+    if (y > pageH - 40) { doc.addPage(); y = margin; }
+
+    doc.setTextColor(...textMuted);
+    doc.setFontSize(7.5);
+    var notes = [
+      '备注：',
+      '• 以上报价为标准参考价格，实际费用根据企业规模、服务频次及定制需求可能有所调整。',
+      '• 「按人头/按户」类服务按实际人数或户数结算；「单次/项目」类服务以实际发生次数为准。',
+      '• 本清单由 HR 仪表板系统自动生成，有效期 30 天。如有疑问请联系您的专属顾问。',
+      ''
+    ];
+    notes.forEach(function(n){
+      doc.text(n, margin, y); y += 3.5;
+    });
+
+    // ── 6. 页脚 ──
+    var footerY = pageH - 12;
+    doc.setDrawColor(...lineLight);
+    doc.setLineWidth(0.3);
+    doc.line(margin, footerY - 3, margin + contentW, footerY - 3);
+    doc.setTextColor(...textMuted);
+    doc.setFontSize(7);
+    doc.text('WPG Holdings Co., Ltd. · 大联大控股 · HR Shared Service Center', margin, footerY + 1);
+    doc.text('本文件由 CN 区 HR 服务指标仪表板自动生成 · 第 ' + doc.internal.getNumberOfPages() + ' 页', pageW - margin, footerY + 1, { align: 'right' });
+
+    // ── 保存 ──
+    var filename = 'WPG-HR服务报价单_' + (state.advisorPerson || '全部') + '_' +
+      today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '.pdf';
+    doc.save(filename);
   }
 
   // ========== 第5页：炫彩介绍页 ==========
