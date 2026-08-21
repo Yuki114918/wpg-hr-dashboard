@@ -1029,6 +1029,10 @@
       var tagMatched = matchServicesByTags(state.svcTagFilters, advProf);
       pricedServices = pricedServices.filter(function(s){ return tagMatched.indexOf(s) >= 0; });
     }
+    // ★ v6.0：从介绍页/详情页点选模块后，计费区也只显示该模块的服务
+    if(state.svcModule && state.svcModule !== 'all') {
+      pricedServices = pricedServices.filter(function(s){ return s.module === state.svcModule; });
+    }
     var calcGroups = {};
     pricedServices.forEach(function(s){ if(!calcGroups[s.module]) calcGroups[s.module] = []; calcGroups[s.module].push(s); });
 
