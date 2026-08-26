@@ -865,6 +865,7 @@
       ctaArea.querySelector('.detail-cta-btn').addEventListener('click', function(){
         state.advisorPerson = p;
         state.svcTagFilters = [];  // 清空标签，用人员维度
+        state.svcModule = 'all';  // 重置模块筛选避免残留
         switchPage('services');
       });
     } else {
@@ -873,6 +874,7 @@
         '📋 浏览可定价服务目录 (' + (QUOTE_SERVICES.filter(function(s){return s.price!=null&&s.price!=='';}).length) + '项) →</button>';
       ctaArea.querySelector('.detail-cta-btn').addEventListener('click', function(){
         state.svcTagFilters = [];
+        state.svcModule = 'all';  // 重置模块筛选避免残留
         switchPage('services');
       });
     }
@@ -1681,7 +1683,8 @@
     var matchBtnArea = el('div', 'ap-match-area');
     var matchBtn = el('button', 'land-btn land-btn-primary ap-match-btn', '🔍 查看匹配服务 (' + (state.svcTagFilters.length ? state.svcTagFilters.length + '个标签' : '全部') + ') →');
     matchBtn.addEventListener('click', function(){
-      // 跳转到服务展示页，带入标签筛选
+      // 跳转到服务展示页，带入标签筛选；重置模块筛选避免残留旧值
+      state.svcModule = 'all';
       switchPage('services');
     });
     matchBtnArea.appendChild(matchBtn);
