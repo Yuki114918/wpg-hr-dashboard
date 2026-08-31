@@ -27,31 +27,61 @@
   var SERVICE_COLORS = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc'];
   var PERSON_PALETTE = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#4e79a7','#59a14f','#edc948','#e15759','#76b7b2','#ff9da7','#b07aa1','#86bcb6','#f28e2b','#8cd17d','#bc82c4','#ffb000','#5b8def'];
 
-  // ★ 顾问卡通头像映射（根据工作特性匹配）
-  var AVATAR_MAP = {
-    'Bill Tsang':   { emoji: '👨‍💼', bg: '#5470c6' },  // 综合管理型
-    'Cako Yang':    { emoji: '👩‍💻', bg: '#ee6666' },  // 招聘配置
-    'Chloe Fang':   { emoji: '👩‍⚖️', bg: '#91cc75' },  // 劳动关系
-    'Chris Zhang':  { emoji: '🧑‍💻', bg: '#3ba272' },  // 薪酬福利
-    'Grace Wang':   { emoji: '👩‍🏫', bg: '#fac858' },  // 培训开发
-    'Heison Wong':  { emoji: '🧑‍💼', bg: '#73c0de' },  // 绩效管理
-    'Hope Zhan':    { emoji: '👩‍💼', bg: '#9a60b4' },  // 综合管理
-    'Iris Li':      { emoji: '👩‍🔧', bg: '#fc8452' },  // 运维支持
-    'Janet Au-Yeung': { emoji: '👩‍⚕️', bg: '#ea7ccc' }, // 福利关怀
-    'Jessie Yang':  { emoji: '👩‍💻', bg: '#ee6666' },
-    'Lily Qiu':     { emoji: '👩‍📊', bg: '#4e79a7' },  // 数据分析
-    'Mandy Hu':     { emoji: '🧑‍💻', bg: '#59a14f' },
-    'Mia Meng':     { emoji: '👩‍🎨', bg: '#edc948' },  // 创意设计
-    'Olivia Ye':    { emoji: '👩‍💼', bg: '#e15759' },
-    'Penny Pan':    { emoji: '🧑‍🎯', bg: '#76b7b2' },  // 目标导向
-    'Rin Shen':     { emoji: '👨‍🔬', bg: '#ff9da7' },  // 研究型
-    'Roc Tian':     { emoji: '🧑‍✈️', bg: '#b07aa1' },  // 快速响应
-    'Sherry Jiang': { emoji: '👩‍📋', bg: '#86bcb6' },  // 文档专家
-    'Skye Yu':      { emoji: '🧑‍🏭', bg: '#f28e2b' },  // 流程优化
-    'Tammy Tao':    { emoji: '👩‍💝', bg: '#8cd17d' },  // 客户服务
-    'Tia Yang':     { emoji: '🧑‍💻', bg: '#bc82c4' },  // 协调支持
-    'Zoe Lin':      { emoji: '👩‍🌐', bg: '#ffb000' }   // 全球化
+  // ★ v6.3 专精领域图标映射（HR模块 → 图标+简称）
+  var SPECIALTY_ICON_MAP = {
+    '招聘与配置作业':            { icon: '🎯', abbr: '招聘', color: '#ee6666' },
+    '人力资源规划':              { icon: '📋', abbr: '规划', color: '#5470c6' },
+    '培训与开发':                { icon: '🎓', abbr: '培训', color: '#fac858' },
+    '薪酬福利':                  { icon: '💰', abbr: '薪酬', color: '#91cc75' },
+    '薪酬福利与税务管理':        { icon: '💰', abbr: '薪税', color: '#91cc75' },
+    '绩效管理':                  { icon: '📊', abbr: '绩效', color: '#73c0de' },
+    '社保公积金管理':            { icon: '🛡️', abbr: '社保', color: '#3ba272' },
+    '劳动关系与证件办理':        { icon: '⚖️', abbr: '劳关', color: '#fc8452' },
+    '员工关系':                  { icon: '🤝', abbr: '员工', color: '#9a60b4' },
+    'HRIS/HRIP数字化':           { icon: '💻', abbr: '数智', color: '#4e79a7' },
+    'HRIS/系统运维':             { icon: '🔧', abbr: '运维', color: '#f28e2b' },
+    '职称等级':                  { icon: '🏆', abbr: '职称', color: '#ea7ccc' },
+    '福利与企业关怀':            { icon: '❤️', abbr: '福利', color: '#e15759' }
   };
+  // 默认专精图标（无匹配时使用）
+  var DEFAULT_SPECIALTY = { icon: '⭐', abbr: 'HR', color: '#6366f1' };
+
+  // ★ 顾问头像映射（v6.3 去除卡通emoji，改为专精领域图标；bg色保留用于渐变背景）
+  // emoji 字段现在存的是占位符，实际渲染时由 getPersonIcon() 动态取专精图标
+  var AVATAR_MAP = {
+    'Bill Tsang':   { bg: '#5470c6' },   // 综合管理型
+    'Cako Yang':    { bg: '#ee6666' },   // 招聘配置
+    'Chloe Fang':   { bg: '#91cc75' },   // 劳动关系
+    'Chris Zhang':  { bg: '#3ba272' },   // 薪酬福利
+    'Grace Wang':   { bg: '#fac858' },   // 培训开发
+    'Heison Wong':  { bg: '#73c0de' },   // 绩效管理
+    'Hope Zhan':    { bg: '#9a60b4' },   // 综合管理
+    'Iris Li':      { bg: '#fc8452' },   // 运维支持
+    'Janet Au-Yeung': { bg: '#ea7ccc' }, // 福利关怀
+    'Jessie Yang':  { bg: '#ee6666' },
+    'Lily Qiu':     { bg: '#4e79a7' },   // 数据分析
+    'Mandy Hu':     { bg: '#59a14f' },
+    'Mia Meng':     { bg: '#edc948' },   // 创意设计
+    'Olivia Ye':    { bg: '#e15759' },
+    'Penny Pan':    { bg: '#76b7b2' },   // 目标导向
+    'Rin Shen':     { bg: '#ff9da7' },   // 研究型
+    'Roc Tian':     { bg: '#b07aa1' },   // 快速响应
+    'Sherry Jiang': { bg: '#86bcb6' },   // 文档专家
+    'Skye Yu':      { bg: '#f28e2b' },   // 流程优化
+    'Tammy Tao':    { bg: '#8cd17d' },   // 客户服务
+    'Tia Yang':     { bg: '#bc82c4' },   // 协调支持
+    'Zoe Lin':      { bg: '#ffb000' }    // 全球化
+  };
+
+  // ★ v6.3 根据人员姓名获取其专精图标（基于 topMod 动态匹配）
+  function getPersonIcon(person) {
+    try {
+      var prof = getAdvisorProfile(person);
+      var modName = prof.topMod;
+      if(modName && modName !== '-' && SPECIALTY_ICON_MAP[modName]) return SPECIALTY_ICON_MAP[modName];
+    } catch(e) {}
+    return DEFAULT_SPECIALTY;
+  }
 
   // ★ 顾问英文名短名（用于介绍页团队墙显示）
   var EN_NAME_MAP = {
@@ -230,7 +260,8 @@
     advisorPerson: '',          // ★ 当前查看的顾问
     svcTagFilters: [],          // ★ v5.4 标签筛选（从顾问页多选带入）
     calcSearch: '',             // ★ v6.1 计费区搜索关键词
-    calcPricingFilter: ''       // ★ v6.1 计费区计费模式筛选
+    calcPricingFilter: '',       // ★ v6.1 计费区计费模式筛选
+    prevPage: 'landing'          // ★ v6.3 上一页（用于返回上一步）
   };
 
   var charts = {};
@@ -790,7 +821,13 @@
   // ========== ★ 多目标返回按钮 ==========
   function renderBackBtn(targets) {
     // targets: [{label:'返回总览', page:'overview'}, ...]
-    if (targets.length === 1) {
+    // ★ v6.3 如果 targets 中有 __prev__ 占位，替换为实际的上一页
+    var hasPrev = false;
+    targets = targets.map(function(t){
+      if(t.page === '__prev__'){ hasPrev = true; return {label:'← 返回上一步', page: state.prevPage || 'landing'}; }
+      return t;
+    });
+    if (targets.length === 1 && !hasPrev) {
       var btn = el('button', 'back-btn', '← ' + targets[0].label);
       btn.addEventListener('click', function () { switchPage(targets[0].page); });
       return btn;
@@ -859,11 +896,11 @@
     if(currentPersons.length === 1) {
       // 单人模式：直接跳到该顾问页或按人员过滤服务
       var p = currentPersons[0];
-      var av = AVATAR_MAP[p] || { emoji: '👤' };
+      var icon = getPersonIcon(p);
       var prof = getAdvisorProfile(p);
       var matchedSvc = matchServicesByTags([]);
       ctaArea.innerHTML = '<button class="land-btn land-btn-primary detail-cta-btn" style="width:100%;max-width:400px;margin:16px auto;">' +
-        av.emoji + ' 查看 ' + p.split(' ')[0] + ' 可承接的服务 (' + matchedSvc.length + '项) →</button>';
+        icon.icon + ' 查看 ' + p.split(' ')[0] + ' 可承接的服务 (' + matchedSvc.length + '项) →</button>';
       ctaArea.querySelector('.detail-cta-btn').addEventListener('click', function(){
         state.advisorPerson = p;
         state.svcTagFilters = [];  // 清空标签，用人员维度
@@ -969,10 +1006,11 @@
   function renderServices() {
     var wrap = $('#page-services'); wrap.innerHTML = '';
 
-    // ★ 多目标返回键
+    // ★ 多目标返回键（含返回上一步）
     wrap.appendChild(renderBackBtn([
-      {label:'返回总览', page:'overview'},
-      {label:'介绍页', page:'landing'}
+      {label:'← 返回上一步', page:'__prev__'},
+      {label:'介绍页', page:'landing'},
+      {label:'顾问页', page:'advisor'}
     ]));
 
     // 顶部 Hero
@@ -985,8 +1023,9 @@
     hrPick.innerHTML = '<div class="hr-pick-label">👤 请选择你的顾问（点击查看详细介绍与服务承接能力）</div>';
     var hrPickGrid = el('div', 'hr-pick-grid');
     META.persons.forEach(function (p) {
-      var av = AVATAR_MAP[p] || { emoji: '👤', bg: '#999' };
-      var btn = el('button', 'hr-pick-btn' + (state.svcHR === p ? ' active' : ''), av.emoji + ' ' + p);
+      var av = AVATAR_MAP[p] || { bg: '#999' };
+      var icon = getPersonIcon(p);
+      var btn = el('button', 'hr-pick-btn' + (state.svcHR === p ? ' active' : ''), icon.icon + ' ' + p);
       btn.style.borderColor = state.svcHR === p ? av.bg : '';
       btn.addEventListener('click', function () {
         state.advisorPerson = p;
@@ -1064,6 +1103,17 @@
     calcFilterBar.appendChild(el('span', null, '  '));
     calcFilterBar.appendChild(el('label', null, '计费模式：'));
     calcFilterBar.appendChild(calcPricingSel);
+    // ★ v6.3 取消筛选按钮
+    var calcClearBtn = el('button', 'svc-toolbar-reset svc-calc-clear', '✕ 取消筛选');
+    calcClearBtn.style.marginLeft = '8px';
+    calcClearBtn.style.fontSize = '13px';
+    calcClearBtn.style.padding = '4px 12px';
+    calcClearBtn.addEventListener('click', function(){
+      state.calcSearch = '';
+      state.calcPricingFilter = '';
+      renderServices();
+    });
+    calcFilterBar.appendChild(calcClearBtn);
     calcSec.appendChild(calcFilterBar);
 
     // ★ 计费区最终过滤（搜索 + 计费模式）
@@ -1541,6 +1591,15 @@
   function renderLanding() {
     var wrap = $('#page-landing'); if (!wrap) return; wrap.innerHTML = '';
 
+    // ★ v6.3 从其他页返回时显示返回上一步按钮
+    if (state.prevPage && state.prevPage !== 'landing') {
+      wrap.appendChild(renderBackBtn([
+        {label:'← 返回上一步', page:'__prev__'},
+        {label:'服务展示', page:'services'},
+        {label:'顾问页', page:'advisor'}
+      ]));
+    }
+
     // Hero 区
     var hero = el('div', 'land-hero');
     hero.innerHTML =
@@ -1621,8 +1680,9 @@
   function renderAdvisor() {
     var wrap = $('#page-advisor'); if (!wrap) return; wrap.innerHTML = '';
 
-    // 返回键
+    // 返回键（含返回上一步）
     wrap.appendChild(renderBackBtn([
+      {label:'← 返回上一步', page:'__prev__'},
       {label:'返回介绍页', page:'landing'},
       {label:'服务展示', page:'services'}
     ]));
@@ -1634,8 +1694,9 @@
     selector.innerHTML = '<div class="advisor-sel-label">👤 选择顾问：</div>';
     var selScroll = el('div', 'advisor-sel-scroll');
     META.persons.forEach(function (p) {
-      var av = AVATAR_MAP[p] || { emoji: '👤', bg: '#999' };
-      var btn = el('button', 'advisor-sel-btn' + (p === targetPerson ? ' active' : ''), av.emoji + ' ' + p.split(' ')[0]);
+      var av = AVATAR_MAP[p] || { bg: '#999' };
+      var icon = getPersonIcon(p);
+      var btn = el('button', 'advisor-sel-btn' + (p === targetPerson ? ' active' : ''), icon.icon + ' ' + p.split(' ')[0]);
       if (p === targetPerson) btn.style.borderColor = av.bg || '#999';
       btn.addEventListener('click', function () {
         state.advisorPerson = p;
@@ -1647,15 +1708,16 @@
 
     // ★ 顾问详情卡
     var prof = getAdvisorProfile(targetPerson);
-    var av = AVATAR_MAP[targetPerson] || { emoji: '👤', bg: '#999' };
+    var av = AVATAR_MAP[targetPerson] || { bg: '#999' };
     var avBg = av.bg || '#999';
+    var icon = getPersonIcon(targetPerson);
 
     var profileCard = el('div', 'advisor-profile-card');
     profileCard.innerHTML =
       '<div class="ap-header" style="background:linear-gradient(135deg,' + avBg + ',' + adjustColor(avBg,40) + ')">' +
-        '<div class="ap-avatar-large">' + av.emoji + '</div>' +
+        '<div class="ap-avatar-large">' + icon.icon + '</div>' +
         '<div class="ap-name">' + targetPerson + '</div>' +
-        '<div class="ap-role">' + prof.topMod + ' · ' + prof.months + '个月在岗</div>' +
+        '<div class="ap-role">' + icon.abbr + '专精 · ' + prof.months + '个月在岗</div>' +
       '</div>' +
       '<div class="ap-body">';
     wrap.appendChild(profileCard);
@@ -1973,9 +2035,9 @@
         if (cb.checked) state.persons.add(p); else state.persons.delete(p); updateAll();
       });
       row.appendChild(cb);
-      // ★ 显示头像emoji
-      var av = AVATAR_MAP[p] || { emoji: '' };
-      row.appendChild(el('span', 'person-avatar-mini', av.emoji));
+      // ★ v6.3 显示专精图标（替代卡通emoji头像）
+      var icon = getPersonIcon(p);
+      row.appendChild(el('span', 'person-avatar-mini', icon.icon));
       row.appendChild(el('span', 'person-name', p));
       // ★ 点击名字也跳转到顾问页
       row.style.cursor = 'pointer';
@@ -1992,6 +2054,8 @@
 
   // ========== 页面切换 ==========
   function switchPage(page) {
+    // ★ v6.3 记录上一页（用于返回上一步）
+    if (page !== state.page) state.prevPage = state.page;
     state.page = page;
     var tabs = document.querySelectorAll('.tab');
     for (var ti = 0; ti < tabs.length; ti++) { if (tabs[ti].getAttribute('data-page') === page) tabs[ti].classList.add('active'); else tabs[ti].classList.remove('active'); }
