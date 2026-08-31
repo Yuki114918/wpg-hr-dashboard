@@ -228,7 +228,9 @@
     feeType: 'total',
     customFee: '',
     advisorPerson: '',          // ★ 当前查看的顾问
-    svcTagFilters: []           // ★ v5.4 标签筛选（从顾问页多选带入）
+    svcTagFilters: [],          // ★ v5.4 标签筛选（从顾问页多选带入）
+    calcSearch: '',             // ★ v6.1 计费区搜索关键词
+    calcPricingFilter: ''       // ★ v6.1 计费区计费模式筛选
   };
 
   var charts = {};
@@ -1035,8 +1037,52 @@
     if(state.svcModule && state.svcModule !== 'all') {
       pricedServices = pricedServices.filter(function(s){ return s.module === state.svcModule; });
     }
+    // ★ v6.1：计费区搜索筛选
+    var calcFilterBar = el('div', 'svc-calc-filter-bar');
+    var calcSearchInput = el('input', 'table-search svc-calc-search');
+    calcSearchInput.placeholder = '🔍 搜索计费项名称…';
+    calcSearchInput.style.width = '220px';
+    calcSearchInput.value = state.calcSearch || '';
+    // 计费模式快捷筛选（按 getPricingType 的 type 分组）
+    var calcPricingSel = el('select', 'filter-select svc-calc-pricing-sel');
+    var cpAll = el('option'); cpAll.value = ''; cpAll.textContent = '全部计费模式'; calcPricingSel.appendChild(cpAll);
+    calcPricingSel.appendChild(opt('_person', '👥 按人头'));
+    calcPricingSel.appendChild(opt('_house', '🏠 按户'));
+    calcPricingSel.appendChild(opt('_once', '🎫 单次'));
+    calcPricingSel.appendChild(opt('project', '📦 项目'));
+    calcPricingSel.appendChild(opt('_item', '📄 按件'));
+    calcPricingSel.value = state.calcPricingFilter || '';
+    // 筛选变化时重渲染服务页（保持 checkbox/数量状态）
+    function refreshCalcArea(){
+      state.calcSearch = calcSearchInput.value;
+      state.calcPricingFilter = calcPricingSel.value;
+      renderServices();
+    }
+    calcSearchInput.addEventListener('input', refreshCalcArea);
+    calcPricingSel.addEventListener('change', refreshCalcArea);
+    calcFilterBar.appendChild(calcSearchInput);
+    calcFilterBar.appendChild(el('span', null, '  '));
+    calcFilterBar.appendChild(el('label', null, '计费模式：'));
+    calcFilterBar.appendChild(calcPricingSel);
+    calcSec.appendChild(calcFilterBar);
+
+    // ★ 计费区最终过滤（搜索 + 计费模式）
+    var finalServices = pricedServices.filter(function(s){
+      if(state.calcSearch){
+        var q = state.calcSearch.toLowerCase();
+        if((s.item||'').toLowerCase().indexOf(q) < 0 && s.content.toLowerCase().indexOf(q) < 0) return false;
+      }
+      if(state.calcPricingFilter){
+        var pt = getPricingType(s);
+        var cat = state.calcPricingFilter;
+        var pricingMap = { '_person': ['person','person_time'], '_house': ['house','house_time'], '_once': ['once'], 'project': ['project'], '_item': ['item'] };
+        var allowed = pricingMap[cat];
+        if(!allowed || allowed.indexOf(pt.type) < 0) return false;
+      }
+      return true;
+    });
     var calcGroups = {};
-    pricedServices.forEach(function(s){ if(!calcGroups[s.module]) calcGroups[s.module] = []; calcGroups[s.module].push(s); });
+    finalServices.forEach(function(s){ if(!calcGroups[s.module]) calcGroups[s.module] = []; calcGroups[s.module].push(s); });
 
     var calcGrid = el('div', 'svc-calc-grid');
     Object.keys(calcGroups).sort().forEach(function(modName){
@@ -1127,6 +1173,7 @@
     svcReset.addEventListener('click', function(){
       state.svcModule = 'all'; state.svcMode = 'priced'; state.svcSearch = '';
       state.svcTagFilters = []; state.selectedServices = new Set(); state.serviceQuantities = {};
+      state.calcSearch = ''; state.calcPricingFilter = '';  // ★ v6.1 清空计费区筛选
       modSel.value = 'all'; modeSel.value = 'priced'; searchInput.value = '';
       renderServices();  // 重新渲染整个服务页（含卡片+计费区+标签栏）
     });
