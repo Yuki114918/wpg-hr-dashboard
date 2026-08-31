@@ -856,12 +856,13 @@
     var wrap = isDaily ? $('#page-daily') : $('#page-project');
     wrap.innerHTML = '';
 
-    // ★ 多目标返回键
+    // ★ 多目标返回键（三页完整导航）
     var fromPage = state.page;
     wrap.appendChild(renderBackBtn([
       {label:'返回总览', page:'overview'},
+      {label:'介绍页', page:'landing'},
       {label:'服务展示', page:'services'},
-      {label:'介绍页', page:'landing'}
+      {label:'顾问页', page:'advisor'}
     ]));
 
     var rows = baseFilter({ type: typeKey });
@@ -1006,10 +1007,11 @@
   function renderServices() {
     var wrap = $('#page-services'); wrap.innerHTML = '';
 
-    // ★ 多目标返回键（含返回上一步）
+    // ★ 多目标返回键（含返回上一步 + 三页完整导航）
     wrap.appendChild(renderBackBtn([
       {label:'← 返回上一步', page:'__prev__'},
       {label:'介绍页', page:'landing'},
+      {label:'服务展示', page:'services'},
       {label:'顾问页', page:'advisor'}
     ]));
 
@@ -1018,6 +1020,21 @@
     hero.innerHTML = '<div class="svc-hero-inner"><h2>HR 共享服务中心 · 服务产品目录</h2><p>专业 · 合规 · 高效 — 一站式 HR 服务解决方案</p></div>';
     wrap.appendChild(hero);
 
+    // ★ v6.4 当前顾问指示条（从顾问页跳转过来时显示）
+    if(state.advisorPerson) {
+      var advBar = el('div', 'svc-advisor-bar');
+      var advIcon = getPersonIcon(state.advisorPerson);
+      advBar.innerHTML = '<span class="svc-advisor-bar-icon">' + advIcon.icon + '</span>' +
+        '<span class="svc-advisor-bar-text">当前顾问：<b>' + state.advisorPerson + '</b> (' + advIcon.abbr + '专精)</span>' +
+        '<button class="svc-advisor-bar-clear" id="svcAdvClear">✕ 切换顾问</button>';
+      wrap.appendChild(advBar);
+      // 延迟绑定（因为元素刚插入DOM）
+      setTimeout(function(){
+        var clr = document.getElementById('svcAdvClear');
+        if(clr) clr.addEventListener('click', function(){ state.advisorPerson = ''; renderServices(); });
+      }, 0);
+    }
+
     // ★ 接单 HR 选择区（点击名字跳转顾问介绍页）
     var hrPick = el('div', 'hr-pick-section');
     hrPick.innerHTML = '<div class="hr-pick-label">👤 请选择你的顾问（点击查看详细介绍与服务承接能力）</div>';
@@ -1025,8 +1042,9 @@
     META.persons.forEach(function (p) {
       var av = AVATAR_MAP[p] || { bg: '#999' };
       var icon = getPersonIcon(p);
-      var btn = el('button', 'hr-pick-btn' + (state.svcHR === p ? ' active' : ''), icon.icon + ' ' + p);
-      btn.style.borderColor = state.svcHR === p ? av.bg : '';
+      var isActive = (state.svcHR === p || state.advisorPerson === p);
+      var btn = el('button', 'hr-pick-btn' + (isActive ? ' active' : ''), icon.icon + ' ' + p);
+      btn.style.borderColor = isActive ? av.bg : '';
       btn.addEventListener('click', function () {
         state.advisorPerson = p;
         switchPage('advisor');
@@ -1103,14 +1121,22 @@
     calcFilterBar.appendChild(el('span', null, '  '));
     calcFilterBar.appendChild(el('label', null, '计费模式：'));
     calcFilterBar.appendChild(calcPricingSel);
-    // ★ v6.3 取消筛选按钮
-    var calcClearBtn = el('button', 'svc-toolbar-reset svc-calc-clear', '✕ 取消筛选');
+    // ★ v6.4 取消筛选按钮（独立样式，避免与工具栏重置按钮冲突）
+    var calcClearBtn = el('button', 'svc-calc-clear', '✕ 取消筛选');
     calcClearBtn.style.marginLeft = '8px';
     calcClearBtn.style.fontSize = '13px';
-    calcClearBtn.style.padding = '4px 12px';
-    calcClearBtn.addEventListener('click', function(){
+    calcClearBtn.style.padding = '5px 14px';
+    calcClearBtn.style.cursor = 'pointer';
+    calcClearBtn.style.position = 'relative';
+    calcClearBtn.style.zIndex = '10';
+    calcClearBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
       state.calcSearch = '';
       state.calcPricingFilter = '';
+      // 直接清空DOM元素值（避免依赖重渲染）
+      calcSearchInput.value = '';
+      calcPricingSel.value = '';
       renderServices();
     });
     calcFilterBar.appendChild(calcClearBtn);
@@ -1591,10 +1617,11 @@
   function renderLanding() {
     var wrap = $('#page-landing'); if (!wrap) return; wrap.innerHTML = '';
 
-    // ★ v6.3 从其他页返回时显示返回上一步按钮
+    // ★ v6.4 从其他页返回时显示返回上一步按钮（三页完整导航）
     if (state.prevPage && state.prevPage !== 'landing') {
       wrap.appendChild(renderBackBtn([
         {label:'← 返回上一步', page:'__prev__'},
+        {label:'介绍页', page:'landing'},
         {label:'服务展示', page:'services'},
         {label:'顾问页', page:'advisor'}
       ]));
@@ -1680,11 +1707,12 @@
   function renderAdvisor() {
     var wrap = $('#page-advisor'); if (!wrap) return; wrap.innerHTML = '';
 
-    // 返回键（含返回上一步）
+    // 返回键（含返回上一步 + 三页完整导航）
     wrap.appendChild(renderBackBtn([
       {label:'← 返回上一步', page:'__prev__'},
-      {label:'返回介绍页', page:'landing'},
-      {label:'服务展示', page:'services'}
+      {label:'介绍页', page:'landing'},
+      {label:'服务展示', page:'services'},
+      {label:'顾问页', page:'advisor'}
     ]));
 
     var targetPerson = state.advisorPerson || META.persons[0];
@@ -1715,7 +1743,6 @@
     var profileCard = el('div', 'advisor-profile-card');
     profileCard.innerHTML =
       '<div class="ap-header" style="background:linear-gradient(135deg,' + avBg + ',' + adjustColor(avBg,40) + ')">' +
-        '<div class="ap-avatar-large">' + icon.icon + '</div>' +
         '<div class="ap-name">' + targetPerson + '</div>' +
         '<div class="ap-role">' + icon.abbr + '专精 · ' + prof.months + '个月在岗</div>' +
       '</div>' +
@@ -1792,8 +1819,9 @@
     var matchBtnArea = el('div', 'ap-match-area');
     var matchBtn = el('button', 'land-btn land-btn-primary ap-match-btn', '🔍 查看匹配服务 (' + (state.svcTagFilters.length ? state.svcTagFilters.length + '个标签' : '全部') + ') →');
     matchBtn.addEventListener('click', function(){
-      // 跳转到服务展示页，带入标签筛选；重置模块筛选避免残留旧值
+      // 跳转到服务展示页，带入标签筛选+顾问身份；重置模块筛选避免残留旧值
       state.svcModule = 'all';
+      state.advisorPerson = targetPerson;  // ★ v6.4 带入当前顾问
       switchPage('services');
     });
     matchBtnArea.appendChild(matchBtn);

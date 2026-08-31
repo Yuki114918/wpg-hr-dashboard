@@ -244,8 +244,16 @@
   .svc-calc-filter-bar{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 14px;background:linear-gradient(135deg,#fafbff,#f5f7fa);border:1px solid var(--line);border-radius:9px;flex-wrap:wrap;}
   .svc-calc-search:focus{border-color:var(--svc-primary);box-shadow:0 0 0 2px rgba(108,92,231,.12);}
   .svc-calc-pricing-sel{min-width:130px;}
-  .svc-calc-clear{background:#fff;border:1px solid var(--line);border-radius:6px;color:var(--muted);cursor:pointer;transition:.15s;white-space:nowrap;}
+  .svc-calc-clear{background:#fff;border:1px solid var(--line);border-radius:6px;color:var(--muted);cursor:pointer;transition:.15s;white-space:nowrap;position:relative;z-index:5;flex-shrink:0;}
   .svc-calc-clear:hover{background:#fef2f2;color:#e53935;border-color:#fca5a5;}
+
+  /* ★ v6.4 当前顾问指示条 */
+  .svc-advisor-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;margin:12px 0;background:linear-gradient(135deg,#f0edff,#fff5f0);border:1px solid #c4b5fd;border-radius:10px;font-size:14px;}
+  .svc-advisor-bar-icon{font-size:22px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;background:#fff;border-radius:8px;flex-shrink:0;}
+  .svc-advisor-bar-text{color:var(--text);flex:1;}
+  .svc-advisor-bar-text b{color:var(--svc-primary);}
+  .svc-advisor-bar-clear{font-size:12px;padding:4px 12px;border-radius:6px;cursor:pointer;background:none;border:1px solid var(--line);color:var(--muted);transition:.15s;white-space:nowrap;flex-shrink:0;}
+  .svc-advisor-bar-clear:hover{background:#fef2f2;color:#e53935;border-color:#fca5a5;}
 
   /* ═══════════════ 第6页：顾问介绍页 Advisor Profile ═══════════════ */
   .advisor-selector{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
@@ -256,10 +264,9 @@
   .advisor-sel-btn.active{background:var(--svc-primary);color:#fff;}
 
   .advisor-profile-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);}
-  .ap-header{padding:32px 24px;text-align:center;color:#fff;position:relative;}
+  .ap-header{padding:20px 24px;text-align:center;color:#fff;position:relative;}
   .ap-header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:20px;background:var(--panel);border-radius:16px 16px 0 0;}
-  .ap-avatar-large{font-size:52px;width:90px;height:90px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.18);border-radius:50%;filter:drop-shadow(0 2px 8px rgba(0,0,0,.2));}
-  .ap-name{font-size:22px;font-weight:700;margin:4px 0 2px;text-shadow:0 1px 8px rgba(0,0,0,.2);}
+  .ap-name{font-size:20px;font-weight:700;margin:2px 0;text-shadow:0 1px 8px rgba(0,0,0,.2);}
   .ap-role{font-size:13px;opacity:.9;}
   .ap-body{padding:20px 24px;position:relative;z-index:1;margin-top:-10px;}
 
