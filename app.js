@@ -1171,35 +1171,37 @@
     calcFilterBar.appendChild(el('span', null, '  '));
     calcFilterBar.appendChild(el('label', null, '计费模式：'));
     calcFilterBar.appendChild(calcPricingSel);
-    // ★ v6.4 取消筛选按钮（v6.8 增强：视觉反馈 + 防止默认行为）
+    // ★ v6.4 取消筛选按钮（v6.9 重写：事件委托，不依赖闭包DOM引用）
     var calcClearBtn = el('button', 'svc-calc-clear', '✕ 取消筛选');
     calcClearBtn.type = 'button';
+    calcClearBtn.setAttribute('data-action', 'clear-calc-filter');
     calcClearBtn.style.marginLeft = '8px';
     calcClearBtn.style.fontSize = '13px';
     calcClearBtn.style.padding = '6px 16px';
     calcClearBtn.style.cursor = 'pointer';
     calcClearBtn.style.position = 'relative';
-    calcClearBtn.style.zIndex = '10';
+    calcClearBtn.style.zIndex = '20';
     calcClearBtn.style.pointerEvents = 'auto';
-    calcClearBtn.addEventListener('click', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      // ★ 视觉反馈：立即改变按钮样式让用户感知到点击生效
-      calcClearBtn.textContent = '✔ 已重置';
-      calcClearBtn.style.background = '#f0fdf4';
-      calcClearBtn.style.color = '#16a34a';
-      calcClearBtn.style.borderColor = '#86efac';
-      // 清空筛选状态
-      state.calcSearch = '';
-      state.calcPricingFilter = '';
-      calcSearchInput.value = '';
-      calcPricingSel.value = '';
-      // 延迟重渲染让用户先看到反馈
-      setTimeout(function(){
-        renderServices();
-      }, 150);
-    });
     calcFilterBar.appendChild(calcClearBtn);
+
+    // ★ 事件委托：在父容器上监听点击，避免闭包引用被销毁的DOM元素
+    calcFilterBar.addEventListener('click', function(e){
+      var target = e.target;
+      // 向上查找 data-action 按钮（兼容点击到子元素的情况）
+      while(target && target !== calcFilterBar) {
+        if(target.getAttribute && target.getAttribute('data-action') === 'clear-calc-filter') {
+          e.preventDefault();
+          e.stopPropagation();
+          // 直接修改 state（不依赖任何局部DOM变量）
+          state.calcSearch = '';
+          state.calcPricingFilter = '';
+          // 立即重渲染（新渲染会自动生成空值的输入框）
+          renderServices();
+          return;
+        }
+        target = target.parentNode;
+      }
+    });
     calcSec.appendChild(calcFilterBar);
 
     // ★ 计费区最终过滤（搜索 + 计费模式）
