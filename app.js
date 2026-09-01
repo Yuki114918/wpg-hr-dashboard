@@ -1171,23 +1171,33 @@
     calcFilterBar.appendChild(el('span', null, '  '));
     calcFilterBar.appendChild(el('label', null, '计费模式：'));
     calcFilterBar.appendChild(calcPricingSel);
-    // ★ v6.4 取消筛选按钮（独立样式，避免与工具栏重置按钮冲突）
+    // ★ v6.4 取消筛选按钮（v6.8 增强：视觉反馈 + 防止默认行为）
     var calcClearBtn = el('button', 'svc-calc-clear', '✕ 取消筛选');
+    calcClearBtn.type = 'button';
     calcClearBtn.style.marginLeft = '8px';
     calcClearBtn.style.fontSize = '13px';
-    calcClearBtn.style.padding = '5px 14px';
+    calcClearBtn.style.padding = '6px 16px';
     calcClearBtn.style.cursor = 'pointer';
     calcClearBtn.style.position = 'relative';
     calcClearBtn.style.zIndex = '10';
+    calcClearBtn.style.pointerEvents = 'auto';
     calcClearBtn.addEventListener('click', function(e){
       e.preventDefault();
       e.stopPropagation();
+      // ★ 视觉反馈：立即改变按钮样式让用户感知到点击生效
+      calcClearBtn.textContent = '✔ 已重置';
+      calcClearBtn.style.background = '#f0fdf4';
+      calcClearBtn.style.color = '#16a34a';
+      calcClearBtn.style.borderColor = '#86efac';
+      // 清空筛选状态
       state.calcSearch = '';
       state.calcPricingFilter = '';
-      // 直接清空DOM元素值（避免依赖重渲染）
       calcSearchInput.value = '';
       calcPricingSel.value = '';
-      renderServices();
+      // 延迟重渲染让用户先看到反馈
+      setTimeout(function(){
+        renderServices();
+      }, 150);
     });
     calcFilterBar.appendChild(calcClearBtn);
     calcSec.appendChild(calcFilterBar);
