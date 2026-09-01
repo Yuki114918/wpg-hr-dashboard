@@ -313,6 +313,28 @@
     return Object.keys(set).sort();
   }
 
+  // ★ v6.6 根据服务模块获取推荐顾问（按该模块方向工时降序排列）
+  function getRecommendedAdvisorsForModule(svcModule) {
+    // 报价服务模块 → HR工作模块
+    var hrMods = QUOTE_TO_HR[svcModule] || [];
+    if(!hrMods.length) return [];
+    // 遍历所有顾问，计算在该HR模块方向的工时
+    var ranked = [];
+    META.persons.forEach(function(p){
+      var prof = getAdvisorProfile(p);
+      var modH = 0;
+      hrMods.forEach(function(hm){ modH += (prof.modHours[hm] || 0); });
+      if(modH > 0) {
+        // 计算该人可承接的匹配服务数
+        var matched = matchServicesByTags([], prof);
+        ranked.push({ person: p, modHours: modH, matchCount: matched.length, prof: prof });
+      }
+    });
+    // 按工时降序，取 Top
+    ranked.sort(function(a,b){ return b.modHours - a.modHours; });
+    return ranked.slice(0, 5); // 最多显示5个推荐
+  }
+
   // ★ 获取顾问的主要工作模块和工时分布
   function getAdvisorProfile(person) {
     var rows = RECORDS.filter(function(r){ return r.person === person; });
@@ -1033,6 +1055,34 @@
         var clr = document.getElementById('svcAdvClear');
         if(clr) clr.addEventListener('click', function(){ state.advisorPerson = ''; renderServices(); });
       }, 0);
+    }
+
+    // ★ v6.6 推荐顾问区（从介绍页点选模块过来时，显示该模块的推荐顾问）
+    if(state.svcModule && state.svcModule !== 'all') {
+      var recAdvisors = getRecommendedAdvisorsForModule(state.svcModule);
+      if(recAdvisors.length > 0) {
+        var recSec = el('div', 'svc-rec-advisor-section');
+        var modLabel = QUOTE_LABEL[state.svcModule] || state.svcModule.replace('服务模块','');
+        recSec.innerHTML = '<div class="svc-rec-title">💡 「' + modLabel + '」推荐顾问 — 基于实际工时专精匹配</div>';
+        var recGrid = el('div', 'svc-rec-grid');
+        recAdvisors.forEach(function(ra){
+          var av = AVATAR_MAP[ra.person] || { bg: '#999' };
+          var raIcon = getPersonIcon(ra.person);
+          var card = el('div', 'svc-rec-card');
+          card.style.borderLeftColor = av.bg || '#999';
+          card.innerHTML =
+            '<div class="svc-rec-name">' + ra.person + '</div>' +
+            '<div class="svc-rec-role">' + raIcon.abbr + '专精 · ' + fmt(ra.modHours,1) + 'h</div>' +
+            '<div class="svc-rec-desc">在该方向投入工时最多，可承接 <b>' + ra.matchCount + '</b> 项相关服务</div>' +
+            '<div class="svc-rec-cta">查看详细介绍 →</div>';
+          card.addEventListener('click', function(){
+            state.advisorPerson = ra.person;
+            switchPage('advisor');
+          });
+          recGrid.appendChild(card);
+        });
+        recSec.appendChild(recGrid); wrap.appendChild(recSec);
+      }
     }
 
     // ★ 接单 HR 选择区（点击名字跳转顾问介绍页）
