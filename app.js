@@ -1833,74 +1833,8 @@
         '</div>';
       hlSec.appendChild(strengthBadge);
     }
-
-    hlSec.appendChild(el('div', 'ap-hl-title', '✨ 选择能力标签，匹配可承接服务'));
-    var hlGrid = el('div', 'ap-hl-grid');
-    highlights.forEach(function(h, idx){
-      // ★ v5.8 按优先级区分样式：priority=1 是专精标签（更醒目）
-      var priorityClass = h.priority === 1 ? ' ap-hl-chip-primary' : (h.priority === 2 ? ' ap-hl-chip-secondary' : '');
-      var chip = el('label', 'ap-hl-chip' + priorityClass + (state.svcTagFilters.indexOf(h.tag) >= 0 ? ' checked' : ''));
-      chip.style.borderColor = h.color;
-      chip.innerHTML =
-        '<input type="checkbox" class="ap-hl-cb" data-tag="' + h.tag + '"' + (state.svcTagFilters.indexOf(h.tag) >= 0 ? ' checked' : '') + '>' +
-        '<span class="ap-hl-icon">' + h.icon + '</span>' +
-        '<span class="ap-hl-label">' + h.tag + '</span>' +
-        '<span class="ap-hl-count">' + h.serviceCount + '项服务</span>';
-      // 点击标签时显示关联服务预览（tooltip）
-      chip.title = h.desc + (h.previewServices.length ? '\n关联服务: ' + h.previewServices.join(' / ') : '');
-      // 勾选/取消
-      var cb = chip.querySelector('.ap-hl-cb');
-      cb.addEventListener('change', function(){
-        if(cb.checked) {
-          if(state.svcTagFilters.indexOf(h.tag) < 0) state.svcTagFilters.push(h.tag);
-          chip.classList.add('checked');
-        } else {
-          state.svcTagFilters = state.svcTagFilters.filter(function(t){ return t !== h.tag; });
-          chip.classList.remove('checked');
-        }
-        // 更新匹配按钮计数
-        updateHlMatchBtn();
-      });
-      hlGrid.appendChild(chip);
-    });
-    hlSec.appendChild(hlGrid);
-
-    // ★ 匹配服务按钮（动态显示已选标签数 + 匹配服务数）
-    var matchBtnArea = el('div', 'ap-match-area');
-    var matchBtn = el('button', 'land-btn land-btn-primary ap-match-btn', '🔍 查看匹配服务 (' + (state.svcTagFilters.length ? state.svcTagFilters.length + '个标签' : '全部') + ') →');
-    matchBtn.addEventListener('click', function(){
-      // 跳转到服务展示页，带入标签筛选+顾问身份；重置模块筛选避免残留旧值
-      state.svcModule = 'all';
-      state.advisorPerson = targetPerson;  // ★ v6.4 带入当前顾问
-      switchPage('services');
-    });
-    matchBtnArea.appendChild(matchBtn);
-
-    // 快捷全选/清空
-    var hlActions = el('div', 'ap-hl-actions');
-    var selAll = el('button', 'mini-btn', '全选标签'); selAll.addEventListener('click', function(){
-      state.svcTagFilters = highlights.map(function(h){ return h.tag; });
-      hlSec.querySelectorAll('.ap-hl-cb').forEach(function(cb){ cb.checked = true; cb.closest('.ap-hl-chip').classList.add('checked'); });
-      updateHlMatchBtn();
-    });
-    var clrAll = el('button', 'mini-btn', '清空'); clrAll.addEventListener('click', function(){
-      state.svcTagFilters = [];
-      hlSec.querySelectorAll('.ap-hl-cb').forEach(function(cb){ cb.checked = false; cb.closest('.ap-hl-chip').classList.remove('checked'); });
-      updateHlMatchBtn();
-    });
-    hlActions.appendChild(selAll); hlActions.appendChild(clrAll);
-    matchBtnArea.appendChild(hlActions);
-
-    hlSec.appendChild(matchBtnArea);
+    // ★ v6.7 简化：只保留个人主要强项，去除标签多选/匹配按钮区域
     apBody.appendChild(hlSec);
-
-    // ★ 局部函数：更新匹配按钮文字
-    function updateHlMatchBtn() {
-      var n = state.svcTagFilters.length;
-      var matchedSvc = matchServicesByTags(state.svcTagFilters, prof);
-      matchBtn.innerHTML = '🔍 查看匹配服务' + (n ? ' (' + n + '个标签 · ' + matchedSvc.length + '项服务)' : ' (全部可定价服务)') + ' →';
-      matchBtn.style.background = n ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '';
-    }
 
     // 模块分布饼图
     apBody.appendChild(el('div', 'ap-section-title', '📈 工作模块分布'));
@@ -1992,6 +1926,10 @@
   // ========== 过滤栏 ==========
   function renderFilterBar() {
     var bar = $('#filterbar'); bar.innerHTML = '';
+    // ★ v6.7 仅在数据分析页显示筛选栏（总览/日常/专案），介绍/服务/顾问页不需要
+    var dataPages = ['overview', 'daily', 'project'];
+    if(dataPages.indexOf(state.page) < 0) { bar.style.display = 'none'; return; }
+    bar.style.display = '';
     bar.appendChild(ymFilter());
     bar.appendChild(selectFilter('区域', META.regions, state.region, function (v) { state.region = v; }));
     bar.appendChild(selectFilter('HR模块', META.modules, state.module, function (v) { state.module = v; }));
