@@ -897,11 +897,11 @@
     if(currentPersons.length === 1) {
       // 单人模式：直接跳到该顾问页或按人员过滤服务
       var p = currentPersons[0];
-      var icon = getPersonIcon(p);
+      // ★ v6.5 去除CTA按钮图标前缀
       var prof = getAdvisorProfile(p);
       var matchedSvc = matchServicesByTags([]);
       ctaArea.innerHTML = '<button class="land-btn land-btn-primary detail-cta-btn" style="width:100%;max-width:400px;margin:16px auto;">' +
-        icon.icon + ' 查看 ' + p.split(' ')[0] + ' 可承接的服务 (' + matchedSvc.length + '项) →</button>';
+        '查看 ' + p.split(' ')[0] + ' 可承接的服务 (' + matchedSvc.length + '项) →</button>';
       ctaArea.querySelector('.detail-cta-btn').addEventListener('click', function(){
         state.advisorPerson = p;
         state.svcTagFilters = [];  // 清空标签，用人员维度
@@ -1041,9 +1041,9 @@
     var hrPickGrid = el('div', 'hr-pick-grid');
     META.persons.forEach(function (p) {
       var av = AVATAR_MAP[p] || { bg: '#999' };
-      var icon = getPersonIcon(p);
+      // ★ v6.5 去除接单HR按钮图标前缀，仅显示全名
       var isActive = (state.svcHR === p || state.advisorPerson === p);
-      var btn = el('button', 'hr-pick-btn' + (isActive ? ' active' : ''), icon.icon + ' ' + p);
+      var btn = el('button', 'hr-pick-btn' + (isActive ? ' active' : ''), p);
       btn.style.borderColor = isActive ? av.bg : '';
       btn.addEventListener('click', function () {
         state.advisorPerson = p;
@@ -1723,8 +1723,8 @@
     var selScroll = el('div', 'advisor-sel-scroll');
     META.persons.forEach(function (p) {
       var av = AVATAR_MAP[p] || { bg: '#999' };
-      var icon = getPersonIcon(p);
-      var btn = el('button', 'advisor-sel-btn' + (p === targetPerson ? ' active' : ''), icon.icon + ' ' + p.split(' ')[0]);
+      // ★ v6.5 去除顾问选择器按钮中的图标前缀，仅显示短名
+      var btn = el('button', 'advisor-sel-btn' + (p === targetPerson ? ' active' : ''), p.split(' ')[0]);
       if (p === targetPerson) btn.style.borderColor = av.bg || '#999';
       btn.addEventListener('click', function () {
         state.advisorPerson = p;
@@ -2063,9 +2063,7 @@
         if (cb.checked) state.persons.add(p); else state.persons.delete(p); updateAll();
       });
       row.appendChild(cb);
-      // ★ v6.3 显示专精图标（替代卡通emoji头像）
-      var icon = getPersonIcon(p);
-      row.appendChild(el('span', 'person-avatar-mini', icon.icon));
+      // ★ v6.5 去除侧边栏小图标，仅保留名字
       row.appendChild(el('span', 'person-name', p));
       // ★ 点击名字也跳转到顾问页
       row.style.cursor = 'pointer';
