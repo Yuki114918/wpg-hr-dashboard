@@ -1193,11 +1193,13 @@
     calcPricingSel.appendChild(opt('project', '📦 项目'));
     calcPricingSel.appendChild(opt('_item', '📄 按件'));
     calcPricingSel.value = state.calcPricingFilter || '';
-    // 筛选变化时重渲染服务页（保持 checkbox/数量状态）
+    // ★ v6.11 计费内容宿主：筛选变化时只重建这里
+    //   （旧写法调用 renderServices() 会连筛选框一起销毁 → 焦点丢失，只能输入1个字符）
+    var calcBodyHost = el('div', 'svc-calc-body-host');
     function refreshCalcArea(){
       state.calcSearch = calcSearchInput.value;
       state.calcPricingFilter = calcPricingSel.value;
-      renderServices();
+      renderCalcBody();          // 只刷新内容区，筛选栏 DOM 原地保留
     }
     calcSearchInput.addEventListener('input', refreshCalcArea);
     calcPricingSel.addEventListener('change', refreshCalcArea);
@@ -1226,17 +1228,36 @@
         if(target.getAttribute && target.getAttribute('data-action') === 'clear-calc-filter') {
           e.preventDefault();
           e.stopPropagation();
-          // 直接修改 state（不依赖任何局部DOM变量）
+          // 直接修改 state + 同步清空输入控件（筛选栏存活，不依赖重渲染）
           state.calcSearch = '';
           state.calcPricingFilter = '';
-          // 立即重渲染（新渲染会自动生成空值的输入框）
-          renderServices();
+          calcSearchInput.value = '';
+          calcPricingSel.value = '';
+          renderCalcBody();
+          // 视觉反馈（按钮不会被销毁，可安全改样式）
+          var btn = target;
+          var oldText = btn.textContent;
+          btn.textContent = '✔ 已重置';
+          btn.style.background = '#f0fdf4';
+          btn.style.color = '#16a34a';
+          btn.style.borderColor = '#86efac';
+          setTimeout(function(){
+            btn.textContent = oldText;
+            btn.style.background = '';
+            btn.style.color = '';
+            btn.style.borderColor = '';
+          }, 900);
           return;
         }
         target = target.parentNode;
       }
     });
     calcSec.appendChild(calcFilterBar);
+    calcSec.appendChild(calcBodyHost);
+
+    // ★ v6.11 计费区内容渲染（独立函数：只重建 calcBodyHost，筛选栏保持存活）
+    function renderCalcBody() {
+    calcBodyHost.innerHTML = '';
 
     // ★ 计费区最终过滤（搜索 + 计费模式）
     var finalServices = pricedServices.filter(function(s){
@@ -1297,7 +1318,7 @@
       });
       calcGrid.appendChild(grp);
     });
-    calcSec.appendChild(calcGrid);
+    calcBodyHost.appendChild(calcGrid);
 
     // ★ 费用汇总栏
     var totalBar = el('div', 'svc-total-bar');
@@ -1314,14 +1335,20 @@
     customInputWrap.appendChild(ci); totalLeft.appendChild(customInputWrap);
     totalBar.appendChild(totalLeft);
     var totalRight = el('div', 'svc-total-right'); totalBar.appendChild(totalRight);
-    calcSec.appendChild(totalBar);
+    calcBodyHost.appendChild(totalBar);
 
     // ★ v5.9：生成服务清单 PDF 按钮
     var pdfBtn = el('button', 'svc-pdf-btn');
     pdfBtn.innerHTML = '📄 生成服务清单 PDF';
     pdfBtn.addEventListener('click', generateServiceQuotePDF);
-    calcSec.appendChild(pdfBtn);
-    wrap.appendChild(calcSec);
+    calcBodyHost.appendChild(pdfBtn);
+
+    // 重建后同步费用汇总显示（保持已选服务金额不丢失）
+    updateSvcTotal();
+    }   // ← renderCalcBody 结束
+
+    wrap.appendChild(calcSec);   // 先入 DOM，再渲染内容（updateSvcTotal 需要能查询到节点）
+    renderCalcBody();            // 首次渲染计费内容区
 
     // 模块筛选 + 作业模式筛选 + 搜索
     var toolbar = el('div', 'svc-toolbar');
