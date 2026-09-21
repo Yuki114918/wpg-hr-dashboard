@@ -445,10 +445,11 @@
   }
 
   // ---------- 图表工具 ----------
-  function chartBox(id, title) {
+  function chartBox(id, title, height) {
     var b = el('div', 'chart-box');
     b.appendChild(el('div', 'chart-title', title));
     var c = el('div', 'chart'); c.id = id;
+    if(height) c.style.height = height + 'px';   // ★ v6.10 支持自定义高度（用于多人横向柱图）
     b.appendChild(c);
     return b;
   }
@@ -919,10 +920,10 @@
     if(currentPersons.length === 1) {
       // 单人模式：直接跳到该顾问页或按人员过滤服务
       var p = currentPersons[0];
-      // ★ v6.5 去除CTA按钮图标前缀
+      // ★ v6.5 去除CTA按钮图标前缀 | ★ v6.10 改用详情页专用样式（原 land-btn-primary 白底白字在浅色页不可见）
       var prof = getAdvisorProfile(p);
       var matchedSvc = matchServicesByTags([]);
-      ctaArea.innerHTML = '<button class="land-btn land-btn-primary detail-cta-btn" style="width:100%;max-width:400px;margin:16px auto;">' +
+      ctaArea.innerHTML = '<button class="land-btn detail-cta-btn detail-cta-primary" style="width:100%;max-width:400px;margin:16px auto;">' +
         '查看 ' + p.split(' ')[0] + ' 可承接的服务 (' + matchedSvc.length + '项) →</button>';
       ctaArea.querySelector('.detail-cta-btn').addEventListener('click', function(){
         state.advisorPerson = p;
@@ -932,7 +933,8 @@
       });
     } else {
       // 多人或全部模式
-      ctaArea.innerHTML = '<button class="land-btn land-btn-secondary detail-cta-btn" style="width:100%;max-width:400px;margin:16px auto;">' +
+      // ★ v6.10 改用详情页专用描边样式（原 land-btn-secondary 是深色Hero专用：白字+半透明白底，在白底页面上完全不可见）
+      ctaArea.innerHTML = '<button class="land-btn detail-cta-btn detail-cta-outline" style="width:100%;max-width:400px;margin:16px auto;">' +
         '📋 浏览可定价服务目录 (' + (QUOTE_SERVICES.filter(function(s){return s.price!=null&&s.price!=='';}).length) + '项) →</button>';
       ctaArea.querySelector('.detail-cta-btn').addEventListener('click', function(){
         state.svcTagFilters = [];
@@ -949,16 +951,20 @@
   function drawDetailCharts(typeKey, rows) {
     var isDaily = typeKey === 'daily';
     var persons = distinctSorted(rows, 'person');
-    var showPersons = persons.slice(0, 12);
+    // ★ v6.10 不再截断前12人，显示全部人员（配合图例单选，用户点谁看谁）
+    var showPersons = persons;
     var yms = activeYMs(rows);
 
     var monthData = showPersons.map(function (p) {
       var data = yms.map(function (ym) { var s = 0; rows.forEach(function (r) { if (r.person === p && r.ym === ym) s += r.hours; }); return Math.round(s * 10) / 10; });
       return { name: p, type: 'bar', stack: 't', data: data, itemStyle: { color: PERSON_PALETTE[persons.indexOf(p) % PERSON_PALETTE.length] } };
     });
+    // ★ v6.10 图例改为单选模式：点击某人 → 只显示该人数据；再点一次恢复全部
+    //   原为 ECharts 默认 multiple 模式（点击 = 隐藏该人），与用户直觉相反
     safeSetOption(isDaily ? 'd_month_person' : 'p_month_person', {
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }, legend: { type: 'scroll', top: 0, textStyle: { fontSize: 10 } },
-      grid: { left: 50, right: 16, top: 40, bottom: 28 },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { type: 'scroll', top: 0, textStyle: { fontSize: 10 }, selectedMode: 'single' },
+      grid: { left: 50, right: 16, top: 28, bottom: 28 },
       xAxis: { type: 'category', data: yms, axisLabel: { fontSize: 10, rotate: yms.length > 8 ? 35 : 0 } },
       yAxis: { type: 'value', axisLabel: { fontSize: 10 } }, series: monthData
     });
@@ -969,25 +975,32 @@
       return { name: p, type: 'bar', stack: 't', data: data, itemStyle: { color: PERSON_PALETTE[persons.indexOf(p) % PERSON_PALETTE.length] } };
     });
     safeSetOption(isDaily ? 'd_meet_person' : 'p_meet_person', {
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }, legend: { type: 'scroll', top: 0, textStyle: { fontSize: 10 } },
-      grid: { left: 50, right: 16, top: 40, bottom: 28 },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { type: 'scroll', top: 0, textStyle: { fontSize: 10 }, selectedMode: 'single' },
+      grid: { left: 50, right: 16, top: 28, bottom: 28 },
       xAxis: { type: 'category', data: yms, axisLabel: { fontSize: 10, rotate: yms.length > 8 ? 35 : 0 } },
       yAxis: { type: 'value', axisLabel: { fontSize: 10 } }, series: meetData
     });
 
     var ph = persons.map(function (p) { var s = 0; rows.forEach(function (r) { if (r.person === p) s += r.hours; }); return { name: p, value: Math.round(s * 10) / 10 }; }).sort(function (a, b) { return a.value - b.value; });
-    safeSetOption(isDaily ? 'd_person_bar' : 'p_person_bar', {
+    // ★ v6.10 横向柱图：按人数动态撑高容器，确保全部人员的人名标签都能显示
+    //   根因：容器固定 280px，22人时 ECharts 类目轴自动隔行隐藏标签（axisLabel.interval auto），
+    //         导致看起来"没显示所有人"（实际柱子都在，只是名字被藏了一半）
+    var barId = isDaily ? 'd_person_bar' : 'p_person_bar';
+    var barDom = document.getElementById(barId);
+    if (barDom) barDom.style.height = Math.max(280, ph.length * 28 + 60) + 'px';
+    safeSetOption(barId, {
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: function (v) { return v + ' h'; } },
-      grid: { left: 110, right: 30, top: 16, bottom: 20 },
+      grid: { left: 110, right: 55, top: 16, bottom: 20 },
       xAxis: { type: 'value', axisLabel: { fontSize: 10 } },
-      yAxis: { type: 'category', data: ph.map(function (x) { return x.name; }), axisLabel: { fontSize: 11 } },
+      yAxis: { type: 'category', data: ph.map(function (x) { return x.name; }), axisLabel: { fontSize: 11, interval: 0 } },
       series: [{ type: 'bar', data: ph.map(function (x) { return x.value; }), itemStyle: { color: isDaily ? DAILY_COLOR : PROJ_COLOR }, label: { show: true, position: 'right', fontSize: 10, formatter: '{c}' } }]
     });
   }
 
   function renderDetailTable(typeKey, rows) {
     var isDaily = typeKey === 'daily';
-    var wrap = document.getElementById(isDaily ? 'd_table' : 'p_table'); if (!wrap) return; wrap.innerHTML = '';
+    var wrap = document.getElementById(isDaily ? 'd_table' : 'p_table'); if (!wrap) return;
     var map = {};
     rows.forEach(function (r) {
       var key = r.module + '||' + r.workitem + '||' + r.detail;
@@ -998,10 +1011,31 @@
     var search = isDaily ? state.dailyDetailSearch : state.projDetailSearch;
     if (search) { var q = search.toLowerCase(); arr = arr.filter(function (x) { return (x.module + x.workitem + x.detail).toLowerCase().indexOf(q) >= 0; }); }
 
-    var searchBox = el('div', 'table-toolbar');
-    var input = el('input', 'table-search'); input.placeholder = '搜索 模块 / 项目 / 细项…'; input.value = search;
-    input.addEventListener('input', function () { if (isDaily) state.dailyDetailSearch = input.value; else state.projDetailSearch = input.value; renderDetailTable(typeKey, rows); });
-    searchBox.appendChild(input); searchBox.appendChild(el('span', 'table-count', '共 ' + arr.length + ' 个细项')); wrap.appendChild(searchBox);
+    // ★ v6.10 关键修复：工具栏只创建一次，搜索时仅重建表格区域
+    //   原实现每次 input 都 wrap.innerHTML='' 重建整个容器，导致输入框被销毁 → 焦点丢失 → 无法打字
+    var searchBox = wrap.querySelector('.table-toolbar');
+    var tableHost = wrap.querySelector('.detail-table-host');
+    if (!searchBox || !tableHost) {
+      wrap.innerHTML = '';
+      searchBox = el('div', 'table-toolbar');
+      var input = el('input', 'table-search'); input.placeholder = '搜索 模块 / 项目 / 细项…'; input.value = search;
+      input.addEventListener('input', function () {
+        if (isDaily) state.dailyDetailSearch = input.value; else state.projDetailSearch = input.value;
+        state.d_page = 0; state.p_page = 0;              // 搜索变更回到第1页
+        renderDetailTable(typeKey, rows);                // 工具栏不会被销毁，焦点保留
+      });
+      searchBox.appendChild(input);
+      searchBox.appendChild(el('span', 'table-count', '共 ' + arr.length + ' 个细项'));
+      wrap.appendChild(searchBox);
+      tableHost = el('div', 'detail-table-host');
+      wrap.appendChild(tableHost);
+    } else {
+      var cntEl = searchBox.querySelector('.table-count');
+      if (cntEl) cntEl.textContent = '共 ' + arr.length + ' 个细项';
+      var curInput = searchBox.querySelector('.table-search');
+      if (curInput && curInput.value !== (search || '')) curInput.value = search || '';
+    }
+    tableHost.innerHTML = '';
 
     var table = el('table', 'data-table'); var head = el('tr');
     ['HR模块', isDaily ? 'HR工作项目' : 'HR相关专案', '工作细项', '处理时长(h)', '处理数量', '主要负责人员'].forEach(function (h) { head.appendChild(el('th', null, h)); });
@@ -1018,11 +1052,11 @@
       tr.style.cursor = 'pointer'; tr.addEventListener('click', function () { state.detail = x.detail; syncDetailFilters(); renderDetail(typeKey); });
       table.appendChild(tr);
     });
-    wrap.appendChild(table);
+    tableHost.appendChild(table);
     var pager = el('div', 'pager');
     var prev = el('button', 'pg-btn', '上一页'); prev.disabled = state[pageKey] === 0; prev.addEventListener('click', function () { state[pageKey]--; renderDetailTable(typeKey, rows); });
     var next = el('button', 'pg-btn', '下一页'); next.disabled = state[pageKey] >= totalPages - 1; next.addEventListener('click', function () { state[pageKey]++; renderDetailTable(typeKey, rows); });
-    pager.appendChild(prev); pager.appendChild(el('span', 'pg-info', '第 ' + (state[pageKey] + 1) + ' / ' + totalPages + ' 页')); pager.appendChild(next); wrap.appendChild(pager);
+    pager.appendChild(prev); pager.appendChild(el('span', 'pg-info', '第 ' + (state[pageKey] + 1) + ' / ' + totalPages + ' 页')); pager.appendChild(next); tableHost.appendChild(pager);
   }
 
   // ========== 渲染：服务展示页（★ v5 重构：去掉亮点卡，突出服务选择）==========
