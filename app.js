@@ -1155,6 +1155,9 @@
       if(recAdvisors.length > 0) {
         var recSec = el('div', 'svc-rec-advisor-section');
         var modLabel = QUOTE_LABEL[state.svcModule] || state.svcModule.replace('服务模块','');
+        // ★ v7.0.1 卡片专精标签必须与上方模块标题严格对应
+        //   （原用 personRoleLabel = 个人全局专精，与模块无关联 → 出现「薪酬福利与税务管理」模块下全都写「行政SDC专精」）
+        var modSpecLabel = modLabel + '专精';
         recSec.innerHTML = '<div class="svc-rec-title">💡 「' + modLabel + '」推荐顾问 — 基于实际工时专精匹配</div>';
         var recGrid = el('div', 'svc-rec-grid');
         recAdvisors.forEach(function(ra){
@@ -1164,7 +1167,7 @@
           card.style.borderLeftColor = av.bg || '#999';
           card.innerHTML =
             '<div class="svc-rec-name">' + ra.person + '</div>' +
-            '<div class="svc-rec-role">' + personRoleLabel(ra.person) + ' · ' + fmt(ra.modHours,1) + 'h</div>' +
+            '<div class="svc-rec-role">' + modSpecLabel + ' · ' + fmt(ra.modHours,1) + 'h</div>' +
             '<div class="svc-rec-desc">在该方向投入工时最多，可承接 <b>' + ra.matchCount + '</b> 项相关服务</div>' +
             '<div class="svc-rec-cta">查看详细介绍 →</div>';
           card.addEventListener('click', function(){
@@ -1356,7 +1359,7 @@
         '<div class="spe-notice-head">' + projExp.icon + ' ' + projExp.name + ' · ' + projExp.role + '</div>' +
         '<div class="spe-notice-body">' +
           '该专家提供的是 <b>单一专案内容</b>，<b>价格另算</b>，不适用下方标准报价单。<br>' +
-          '如需专案报价，请联系 <b>SDC 共享中心专家（Yuki / Queenie）</b> 获取专案方案与单独报价。' +
+          '如需其他业务报价，请联系 <b>SDC 共享中心专家（Yuki / Queenie）</b> 获取对应方案与单独报价。' +
         '</div>' +
         '<button class="land-btn land-btn-primary spe-notice-btn" type="button">👥 联系 SDC 共享中心专家 →</button>';
       projNotice.querySelector('.spe-notice-btn').addEventListener('click', function(){
