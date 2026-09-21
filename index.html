@@ -266,6 +266,40 @@
   .svc-rec-desc{font-size:11px;color:var(--muted);line-height:1.4;margin-bottom:6px;}
   .svc-rec-cta{font-size:11px;color:var(--daily);font-weight:600;text-align:right;}
 
+  /* ★ v7.0 专家团队区（SDC 共享中心专家 / 专案专家） */
+  .svc-expert-section{background:linear-gradient(135deg,#f6f3ff,#f0f9ff);border:1px solid #c7d2fe;border-radius:12px;padding:16px 18px;margin:12px 0;}
+  .svc-expert-title{font-size:14px;font-weight:700;color:var(--head);margin-bottom:12px;}
+  .svc-expert-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;}
+  .svc-expert-card{background:var(--panel);border:1px solid var(--line);border-left:4px solid;border-radius:10px;padding:12px 14px;cursor:pointer;transition:.2s;position:relative;}
+  .svc-expert-card:hover{transform:translateY(-3px);box-shadow:0 8px 22px rgba(108,92,231,.18);}
+  .svc-expert-card-proj{background:#fffdf7;}
+  .svc-expert-badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;border:1px solid;margin-bottom:6px;}
+  .svc-expert-name{font-size:15px;font-weight:700;color:var(--head);margin-bottom:2px;}
+  .svc-expert-role{font-size:11.5px;color:var(--svc-primary);font-weight:600;margin-bottom:4px;}
+  .svc-expert-note{font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:6px;}
+  .svc-expert-cta{font-size:11px;color:var(--daily);font-weight:600;text-align:right;}
+
+  /* ★ v7.0 专案专家说明（价格另算） */
+  .svc-project-expert-notice{background:#fffbea;border:1px solid #fcd34d;border-left:4px solid #f59e0b;border-radius:10px;padding:16px 18px;margin:12px 0;}
+  .spe-notice-head{font-size:14px;font-weight:700;color:#92400e;margin-bottom:8px;}
+  .spe-notice-body{font-size:12.5px;color:#7c5a12;line-height:1.7;margin-bottom:12px;}
+  .spe-notice-btn{display:inline-block !important;padding:8px 18px;font-size:12.5px;}
+
+  /* ★ v7.0 计费区空结果提示 */
+  .svc-calc-empty{background:#fff8f8;border:1px dashed #fca5a5;border-radius:8px;padding:16px;margin-bottom:12px;font-size:13px;color:#b91c1c;text-align:center;line-height:1.7;}
+  .svc-calc-empty span{color:var(--muted);font-size:12px;}
+
+  /* ★ v7.0 顾问选择器中的专家分组 */
+  .advisor-sel-divider{font-size:11px;color:var(--muted);padding:0 4px;align-self:center;}
+  .advisor-sel-btn-expert{border-style:dashed;font-weight:600;}
+
+  /* ★ v7.0 专家档案卡 */
+  .expert-profile-card .ap-body{padding-top:16px;}
+  .expert-scope-box{background:#faf9ff;border:1px solid var(--line);border-left:4px solid #6366f1;border-radius:10px;padding:16px 18px;margin-bottom:16px;}
+  .expert-scope-tag{font-size:12px;font-weight:700;margin-bottom:6px;}
+  .expert-scope-note{font-size:13px;font-weight:600;color:var(--head);margin-bottom:10px;}
+  .expert-scope-desc{font-size:12.5px;color:var(--text);line-height:1.8;margin-bottom:6px;}
+
   /* ═══════════════ 第6页：顾问介绍页 Advisor Profile ═══════════════ */
   .advisor-selector{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
   .advisor-sel-label{font-size:13px;font-weight:600;color:var(--head);white-space:nowrap;}

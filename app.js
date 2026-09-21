@@ -13,6 +13,28 @@
   window.QUOTE_SERVICES = QUOTE_SERVICES;
   window.QUOTE_MODULES = QUOTE_MODULES;
 
+  // ══════════════ ★ v7.0 专家团队口径调整 ══════════════
+  //  · SDC 共享中心专家：Yuki / Queenie —— 匹配所有业务（不参与工时排行）
+  //  · HR 人才发展与组织规划：Chris Zhang —— 单一专案内容，价格另算
+  //  · HR 招聘专家：Roc Tian —— 单一专案内容，价格另算
+  //  Chris / Roc 的工时统计资料已从版面剔除（不进入任何人效排行与图表）
+  var STAT_EXCLUDED_PERSONS = ['Chris Zhang', 'Roc Tian'];
+  var EXPERT_TEAM = [
+    { name:'Yuki',        role:'SDC 共享中心专家',        tag:'SDC 共享中心', note:'匹配所有业务 · 可承接全部定价服务', scope:'all',     icon:'🏢', color:'#6366f1' },
+    { name:'Queenie',     role:'SDC 共享中心专家',        tag:'SDC 共享中心', note:'匹配所有业务 · 可承接全部定价服务', scope:'all',     icon:'🏢', color:'#8b5cf6' },
+    { name:'Chris Zhang', role:'HR 人才发展与组织规划',   tag:'专案专家',     note:'单一专案内容 · 价格另算',           scope:'project', icon:'🎓', color:'#fac858' },
+    { name:'Roc Tian',    role:'HR 招聘专家',            tag:'专案专家',     note:'单一专案内容 · 价格另算',           scope:'project', icon:'🎯', color:'#ee6666' }
+  ];
+  function getExpertInfo(person) {
+    for (var i = 0; i < EXPERT_TEAM.length; i++) { if (EXPERT_TEAM[i].name === person) return EXPERT_TEAM[i]; }
+    return null;
+  }
+  // ★ 剔除 Chris / Roc 的统计资料（工时、记录、图表全部不再计入）
+  RECORDS = RECORDS.filter(function (r) { return STAT_EXCLUDED_PERSONS.indexOf(r.person) < 0; });
+  META = Object.assign({}, META, {
+    persons: (META.persons || []).filter(function (p) { return STAT_EXCLUDED_PERSONS.indexOf(p) < 0; })
+  });
+
   // ---------- 颜色 ----------
   var MODULE_COLORS = {
     '人力资源规划': '#5470c6',
@@ -44,7 +66,8 @@
     '福利与企业关怀':            { icon: '❤️', abbr: '福利', color: '#e15759' }
   };
   // 默认专精图标（无匹配时使用）
-  var DEFAULT_SPECIALTY = { icon: '⭐', abbr: 'HR', color: '#6366f1' };
+  // ★ v7.0 文案调整：无明确模块专精者统一标注为「行政SDC专精」（原为「HR专精」）
+  var DEFAULT_SPECIALTY = { icon: '⭐', abbr: '行政SDC', color: '#6366f1' };
 
   // ★ 顾问头像映射（v6.3 去除卡通emoji，改为专精领域图标；bg色保留用于渐变背景）
   // emoji 字段现在存的是占位符，实际渲染时由 getPersonIcon() 动态取专精图标
@@ -76,11 +99,31 @@
   // ★ v6.3 根据人员姓名获取其专精图标（基于 topMod 动态匹配）
   function getPersonIcon(person) {
     try {
+      // ★ v7.0 专家团队成员优先返回其专家身份（不计入工时统计）
+      var ex = getExpertInfo(person);
+      if (ex) return { icon: ex.icon, abbr: ex.role, color: ex.color, isExpert: true };
       var prof = getAdvisorProfile(person);
       var modName = prof.topMod;
       if(modName && modName !== '-' && SPECIALTY_ICON_MAP[modName]) return SPECIALTY_ICON_MAP[modName];
     } catch(e) {}
     return DEFAULT_SPECIALTY;
+  }
+
+  // ★ v7.0 人员身份标签：专家显示其专家头衔，其余显示「XX专精」
+  function personRoleLabel(person) {
+    var ex = getExpertInfo(person);
+    if (ex) return ex.role;
+    return getPersonIcon(person).abbr + '专精';
+  }
+  // ★ v7.0 是否为「匹配所有业务」的 SDC 共享中心专家
+  function isAllScopeExpert(person) {
+    var ex = getExpertInfo(person);
+    return !!(ex && ex.scope === 'all');
+  }
+  // ★ v7.0 是否为「单一专案 · 价格另算」的专案专家
+  function isProjectExpert(person) {
+    var ex = getExpertInfo(person);
+    return !!(ex && ex.scope === 'project');
   }
 
   // ★ 顾问英文名短名（用于介绍页团队墙显示）
@@ -278,6 +321,19 @@
   function fmt(n, d) { d = (d == null ? 1 : d); return (Math.round(n * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString('en-US'); }
   function opt(val, label) { var o = document.createElement('option'); o.value = val; o.textContent = label; return o; }
   function moduleColor(m) { return MODULE_COLORS[m] || '#999'; }
+  // ★ v7.0 首页 Hero 统计（按剔除后的统计口径实时计算，避免写死数字与实际脱节）
+  function _heroTotalHours() { var s = 0; for (var i = 0; i < RECORDS.length; i++) s += RECORDS[i].hours; return s; }
+  function _heroPricedCount() { return QUOTE_SERVICES.filter(function (s) { return s.price != null && s.price !== ''; }).length; }
+
+  // ★ v7.0 统一「按服务模块浏览」入口
+  //   模块口径唯一：清空顾问/标签残留，避免「顾问专精 ∩ 所选模块 = 空集 → 计费区无服务」
+  function selectServiceModule(mod) {
+    state.svcModule = mod || 'all';
+    state.svcMode = 'priced';
+    state.advisorPerson = '';
+    state.svcTagFilters = [];
+    switchPage('services');
+  }
 
   // ---------- 核心过滤 ----------
   function baseFilter(opts) {
@@ -1080,8 +1136,10 @@
     if(state.advisorPerson) {
       var advBar = el('div', 'svc-advisor-bar');
       var advIcon = getPersonIcon(state.advisorPerson);
+      var curExpert = getExpertInfo(state.advisorPerson);
       advBar.innerHTML = '<span class="svc-advisor-bar-icon">' + advIcon.icon + '</span>' +
-        '<span class="svc-advisor-bar-text">当前顾问：<b>' + state.advisorPerson + '</b> (' + advIcon.abbr + '专精)</span>' +
+        '<span class="svc-advisor-bar-text">' + (curExpert ? '当前专家' : '当前顾问') + '：<b>' + state.advisorPerson + '</b> (' +
+          (curExpert ? (curExpert.role + ' · ' + curExpert.note) : personRoleLabel(state.advisorPerson)) + ')</span>' +
         '<button class="svc-advisor-bar-clear" id="svcAdvClear">✕ 切换顾问</button>';
       wrap.appendChild(advBar);
       // 延迟绑定（因为元素刚插入DOM）
@@ -1106,7 +1164,7 @@
           card.style.borderLeftColor = av.bg || '#999';
           card.innerHTML =
             '<div class="svc-rec-name">' + ra.person + '</div>' +
-            '<div class="svc-rec-role">' + raIcon.abbr + '专精 · ' + fmt(ra.modHours,1) + 'h</div>' +
+            '<div class="svc-rec-role">' + personRoleLabel(ra.person) + ' · ' + fmt(ra.modHours,1) + 'h</div>' +
             '<div class="svc-rec-desc">在该方向投入工时最多，可承接 <b>' + ra.matchCount + '</b> 项相关服务</div>' +
             '<div class="svc-rec-cta">查看详细介绍 →</div>';
           card.addEventListener('click', function(){
@@ -1118,6 +1176,31 @@
         recSec.appendChild(recGrid); wrap.appendChild(recSec);
       }
     }
+
+    // ★ v7.0 专家团队区（SDC 共享中心专家 · 匹配所有业务 / 专案专家 · 价格另算）
+    var expSec = el('div', 'svc-expert-section');
+    expSec.appendChild(el('div', 'svc-expert-title', '🏢 专家团队 — SDC 共享中心 & 专案专家'));
+    var expGrid = el('div', 'svc-expert-grid');
+    EXPERT_TEAM.forEach(function (ex) {
+      var card = el('div', 'svc-expert-card svc-expert-card-' + (ex.scope === 'all' ? 'sdc' : 'proj'));
+      card.style.borderLeftColor = ex.color;
+      card.setAttribute('data-expert', ex.name);
+      card.innerHTML =
+        '<div class="svc-expert-badge" style="background:' + ex.color + '1a;color:' + ex.color + ';border-color:' + ex.color + '66">' + ex.tag + '</div>' +
+        '<div class="svc-expert-name">' + ex.icon + ' ' + ex.name + '</div>' +
+        '<div class="svc-expert-role">' + ex.role + '</div>' +
+        '<div class="svc-expert-note">' + ex.note + '</div>' +
+        '<div class="svc-expert-cta">' + (ex.scope === 'all' ? '查看全部可承接服务 →' : '查看专案服务说明 →') + '</div>';
+      card.addEventListener('click', function () {
+        state.advisorPerson = ex.name;
+        state.svcModule = 'all';           // 专家口径独立，清掉模块/标签残留
+        state.svcTagFilters = [];
+        switchPage('services');
+      });
+      expGrid.appendChild(card);
+    });
+    expSec.appendChild(expGrid);
+    wrap.appendChild(expSec);
 
     // ★ 接单 HR 选择区（点击名字跳转顾问介绍页）
     var hrPick = el('div', 'hr-pick-section');
@@ -1163,19 +1246,25 @@
 
     // ★ 只显示有报价的服务（v5.6：如果有 advisorPerson，只显示该顾问可承接的服务）
     // ★ v5.7：如果还有标签筛选，进一步按标签匹配结果过滤（确保计费区数量=匹配数）
+    // ★ v7.0 模块优先：一旦用户在介绍页/图表点选了具体服务模块，就以「模块」为唯一口径，
+    //   不再叠加「顾问能力 ∩ 模块」的交集 —— 旧逻辑里顾问专精与所选模块不一致时交集为空，
+    //   会出现「选了模块 → 计费区一个服务都没有」的问题。
+    var moduleLocked = !!(state.svcModule && state.svcModule !== 'all');
+    var isAllExpert = state.advisorPerson ? isAllScopeExpert(state.advisorPerson) : false;   // SDC 专家：匹配所有业务
+    var isProjExpert = state.advisorPerson ? isProjectExpert(state.advisorPerson) : false;   // 专案专家：价格另算
     var advProf = state.advisorPerson ? getAdvisorProfile(state.advisorPerson) : null;
     var pricedServices = QUOTE_SERVICES.filter(function(s){ return s.price != null && s.price !== ''; });
-    if(advProf) {
+    if(advProf && !moduleLocked && !isAllExpert && !isProjExpert) {
       var advCapable = matchServicesByTags([], advProf);  // 通用标签+profile = 该人工作范围内全部服务
       pricedServices = pricedServices.filter(function(s){ return advCapable.indexOf(s) >= 0; });
     }
-    // ★ v5.7 关键修复：有标签筛选时，计费区只保留标签匹配的服务
-    if(state.svcTagFilters && state.svcTagFilters.length > 0) {
+    // ★ v5.7 关键修复：有标签筛选时，计费区只保留标签匹配的服务（模块优先时标签让位）
+    if(!moduleLocked && state.svcTagFilters && state.svcTagFilters.length > 0) {
       var tagMatched = matchServicesByTags(state.svcTagFilters, advProf);
       pricedServices = pricedServices.filter(function(s){ return tagMatched.indexOf(s) >= 0; });
     }
     // ★ v6.0：从介绍页/详情页点选模块后，计费区也只显示该模块的服务
-    if(state.svcModule && state.svcModule !== 'all') {
+    if(moduleLocked) {
       pricedServices = pricedServices.filter(function(s){ return s.module === state.svcModule; });
     }
     // ★ v6.1：计费区搜索筛选
@@ -1259,6 +1348,27 @@
     function renderCalcBody() {
     calcBodyHost.innerHTML = '';
 
+    // ★ v7.0 专案专家（Chris / Roc）：单一专案内容，不适用标准报价单
+    if(isProjExpert) {
+      var projExp = getExpertInfo(state.advisorPerson);
+      var projNotice = el('div', 'svc-project-expert-notice');
+      projNotice.innerHTML =
+        '<div class="spe-notice-head">' + projExp.icon + ' ' + projExp.name + ' · ' + projExp.role + '</div>' +
+        '<div class="spe-notice-body">' +
+          '该专家提供的是 <b>单一专案内容</b>，<b>价格另算</b>，不适用下方标准报价单。<br>' +
+          '如需专案报价，请联系 <b>SDC 共享中心专家（Yuki / Queenie）</b> 获取专案方案与单独报价。' +
+        '</div>' +
+        '<button class="land-btn land-btn-primary spe-notice-btn" type="button">👥 联系 SDC 共享中心专家 →</button>';
+      projNotice.querySelector('.spe-notice-btn').addEventListener('click', function(){
+        state.advisorPerson = 'Yuki';
+        state.svcModule = 'all';
+        state.svcTagFilters = [];
+        renderServices();
+      });
+      calcBodyHost.appendChild(projNotice);
+      return;   // 专案专家不展示标准计费清单
+    }
+
     // ★ 计费区最终过滤（搜索 + 计费模式）
     var finalServices = pricedServices.filter(function(s){
       if(state.calcSearch){
@@ -1276,6 +1386,13 @@
     });
     var calcGroups = {};
     finalServices.forEach(function(s){ if(!calcGroups[s.module]) calcGroups[s.module] = []; calcGroups[s.module].push(s); });
+
+    // ★ v7.0 空结果友好提示（避免出现「一片空白、以为坏了」的观感）
+    if(finalServices.length === 0) {
+      var emptyHint = el('div', 'svc-calc-empty');
+      emptyHint.innerHTML = '🔍 当前条件下没有可选服务。<br><span>可点击「✕ 取消筛选」，或切换服务模块 / 计费模式后再试。</span>';
+      calcBodyHost.appendChild(emptyHint);
+    }
 
     var calcGrid = el('div', 'svc-calc-grid');
     Object.keys(calcGroups).sort().forEach(function(modName){
@@ -1356,7 +1473,13 @@
     var optA = el('option'); optA.value = 'all'; optA.textContent = '全部模块'; modSel.appendChild(optA);
     QUOTE_MODULES.forEach(function (m) { var o = el('option'); o.value = m; o.textContent = m.replace(/服务模块$/, ''); modSel.appendChild(o); });
     modSel.value = state.svcModule;
-    modSel.addEventListener('change', function () { state.svcModule = modSel.value; renderServiceCards(); });
+    // ★ v7.0 模块下拉影响计费区范围，改为整页重渲染确保计费区同步
+    modSel.addEventListener('change', function () {
+      state.svcModule = modSel.value;
+      state.advisorPerson = '';          // 模块口径独立，清掉顾问残留
+      state.svcTagFilters = [];
+      renderServices();
+    });
     toolbar.appendChild(el('label', null, '服务模块：')); toolbar.appendChild(modSel);
     var modeSel = el('select', 'filter-select');
     var mA = el('option'); mA.value = 'all'; mA.textContent = '全部模式'; modeSel.appendChild(mA);
@@ -1418,15 +1541,29 @@
   function renderServiceCards() {
     var area = document.getElementById('svc_cards'); if (!area) return; area.innerHTML = '';
 
+    // ★ v7.0 专案专家：标准报价目录不适用，改为专案说明卡
+    if(isProjectExpert(state.advisorPerson)) {
+      var pex = getExpertInfo(state.advisorPerson);
+      var pexBox = el('div', 'svc-project-expert-notice');
+      pexBox.innerHTML =
+        '<div class="spe-notice-head">' + pex.icon + ' ' + pex.name + ' · ' + pex.role + '</div>' +
+        '<div class="spe-notice-body">该专家提供 <b>单一专案内容</b>，<b>价格另算</b>，因此不展示标准服务报价目录。<br>如需报价请联系 SDC 共享中心专家（Yuki / Queenie）。</div>';
+      area.appendChild(pexBox);
+      return;
+    }
+
     // ★ v5.4 标签筛选：如果从顾问页带入了标签，用 matchServicesByTags 过滤（带顾问profile）
     var tagFiltered = null;
     var advProf = state.advisorPerson ? getAdvisorProfile(state.advisorPerson) : null;
+    // ★ v7.0 模块优先 / SDC 共享中心专家（匹配所有业务）：不再叠加顾问工作范围过滤
+    var moduleLocked = !!(state.svcModule && state.svcModule !== 'all');
+    var skipAdvisorScope = moduleLocked || isAllScopeExpert(state.advisorPerson);
     // ★ v5.6 有 advisorPerson 时，即使无标签也按该人工作范围过滤
     var personScope = null;
-    if(advProf && (!state.svcTagFilters || state.svcTagFilters.length === 0)) {
+    if(advProf && !skipAdvisorScope && (!state.svcTagFilters || state.svcTagFilters.length === 0)) {
       personScope = matchServicesByTags([], advProf);
     }
-    if(state.svcTagFilters && state.svcTagFilters.length > 0) {
+    if(!moduleLocked && state.svcTagFilters && state.svcTagFilters.length > 0) {
       tagFiltered = matchServicesByTags(state.svcTagFilters, advProf);
     }
 
@@ -1763,9 +1900,10 @@
           '<button class="land-btn land-btn-secondary" onclick="document.querySelector(\'.tab[data-page=advisor]\').click()">👥 选择您的顾问</button>' +
         '</div>' +
         '<div class="land-stats-row">' +
-          '<div class="land-stat"><b>21,402+</b><span>累计交付工时</span></div>' +
-          '<div class="land-stat"><b>60+</b><span>项可定价服务</span></div>' +
-          '<div class="land-stat"><b>22</b><span>位专业顾问</span></div>' +
+          '<div class="land-stat"><b>' + fmt(_heroTotalHours(), 0) + '+</b><span>累计交付工时</span></div>' +
+          '<div class="land-stat"><b>' + _heroPricedCount() + '+</b><span>项可定价服务</span></div>' +
+          '<div class="land-stat"><b>' + META.persons.length + '</b><span>位统计顾问</span></div>' +
+          '<div class="land-stat"><b>' + EXPERT_TEAM.length + '</b><span>位专家（SDC / 专案）</span></div>' +
         '</div>' +
       '</div>';
     wrap.appendChild(hero);
@@ -1800,11 +1938,9 @@
       var bubble = el('div', 'land-svc-bubble land-svc-clickable');
       bubble.style.borderColor = md.color;
       bubble.innerHTML = '<div class="lsb-icon">' + md.icon + '</div><div class="lsb-name">' + md.name + '</div><div class="lsb-count"><b>' + md.count + '</b> 项服务</div><div class="lsb-desc">' + md.desc + '</div>';
-      // ★ 点击跳转到服务展示页并预选该模块
+      // ★ 点击跳转到服务展示页并预选该模块（v7.0：统一入口，清掉顾问残留）
       bubble.addEventListener('click', function () {
-        state.svcModule = md.mod;
-        state.svcMode = 'priced';
-        switchPage('services');
+        selectServiceModule(md.mod);
       });
       svcMap.appendChild(bubble);
     });
@@ -1855,7 +1991,53 @@
       });
       selScroll.appendChild(btn);
     });
+    // ★ v7.0 专家团队（SDC 共享中心专家 + 专案专家）加入选择器
+    selScroll.appendChild(el('span', 'advisor-sel-divider', '｜专家'));
+    EXPERT_TEAM.forEach(function (ex) {
+      var eBtn = el('button', 'advisor-sel-btn advisor-sel-btn-expert' + (ex.name === targetPerson ? ' active' : ''), ex.name.split(' ')[0]);
+      eBtn.setAttribute('data-expert', ex.name);
+      if (ex.name === targetPerson) eBtn.style.borderColor = ex.color;
+      eBtn.addEventListener('click', function () {
+        state.advisorPerson = ex.name;
+        renderAdvisor();
+      });
+      selScroll.appendChild(eBtn);
+    });
     selector.appendChild(selScroll); wrap.appendChild(selector);
+
+    // ★ v7.0 专家档案卡（SDC 共享中心专家 / 专案专家：无工时统计，改展示定位与可承接范围）
+    var curExpertInfo = getExpertInfo(targetPerson);
+    if (curExpertInfo && META.persons.indexOf(targetPerson) < 0) {
+      var allPricedCnt = QUOTE_SERVICES.filter(function(s){ return s.price != null && s.price !== ''; }).length;
+      var expCard = el('div', 'advisor-profile-card expert-profile-card');
+      expCard.innerHTML =
+        '<div class="ap-header" style="background:linear-gradient(135deg,' + curExpertInfo.color + ',' + adjustColor(curExpertInfo.color, 40) + ')">' +
+          '<div class="ap-name">' + curExpertInfo.icon + ' ' + curExpertInfo.name + '</div>' +
+          '<div class="ap-role">' + curExpertInfo.role + '</div>' +
+        '</div>' +
+        '<div class="ap-body">' +
+          '<div class="expert-scope-box" style="border-left-color:' + curExpertInfo.color + '">' +
+            '<div class="expert-scope-tag" style="color:' + curExpertInfo.color + '">' + curExpertInfo.tag + '</div>' +
+            '<div class="expert-scope-note">' + curExpertInfo.note + '</div>' +
+            '<div class="expert-scope-desc">' +
+              (curExpertInfo.scope === 'all'
+                ? '该专家属于 <b>SDC 共享服务中心</b>，作为统一服务窗口 <b>匹配所有业务方向</b>，可承接全部 <b>' + allPricedCnt + '</b> 项定价服务，无需按专精范围限制。'
+                : '该专家提供的是 <b>单一专案内容</b>（' + curExpertInfo.role + '），采用 <b>专案制计价、价格另算</b>，不适用标准报价单。') +
+            '</div>' +
+            '<div class="expert-scope-desc">📌 说明：该专家为专案制/共享中心角色，<b>不参与日常工作量排行</b>，因此本页不显示工时统计资料。</div>' +
+          '</div>' +
+          '<div class="ap-cta"><button class="land-btn land-btn-primary expert-cta-btn">' +
+            (curExpertInfo.scope === 'all' ? '查看全部可承接服务 (' + allPricedCnt + '项) →' : '查看专案服务说明 →') +
+          '</button></div>' +
+        '</div>';
+      wrap.appendChild(expCard);
+      expCard.querySelector('.expert-cta-btn').addEventListener('click', function () {
+        state.svcModule = 'all';
+        state.svcTagFilters = [];
+        switchPage('services');
+      });
+      return;   // 专家无工时数据，跳过后续指标/图表渲染
+    }
 
     // ★ 顾问详情卡
     var prof = getAdvisorProfile(targetPerson);
