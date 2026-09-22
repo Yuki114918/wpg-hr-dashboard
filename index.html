@@ -206,6 +206,10 @@
   .hr-pick-btn{padding:5px 12px;border:1.5px solid var(--line);border-radius:16px;background:#fff;font-size:11.5px;cursor:pointer;transition:.15s;color:var(--text);}
   .hr-pick-btn:hover{border-color:var(--svc-primary);color:var(--svc-primary);}
   .hr-pick-btn.active{background:var(--svc-primary);color:#fff;border-color:var(--svc-primary);}
+  /* ★ v7.0.8 顾问按钮可多选 + 详情入口 */
+  .hr-pick-item{display:inline-flex;align-items:center;gap:3px;}
+  .hr-pick-more{padding:5px 8px;border:1.5px solid var(--line);border-radius:16px;background:#fff;font-size:11px;cursor:pointer;color:var(--muted);transition:.15s;line-height:1.2;}
+  .hr-pick-more:hover{background:#eef2ff;color:var(--svc-primary);border-color:var(--svc-primary);}
 
   /* 年月筛选 */
   .ym-row{display:flex;gap:6px;}
@@ -249,12 +253,19 @@
   .svc-calc-clear:hover{background:#fef2f2;color:#e53935;border-color:#fca5a5;}
 
   /* ★ v6.4 当前顾问指示条 */
-  .svc-advisor-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;margin:12px 0;background:linear-gradient(135deg,#f0edff,#fff5f0);border:1px solid #c4b5fd;border-radius:10px;font-size:14px;}
+  .svc-advisor-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;margin:12px 0;background:linear-gradient(135deg,#f0edff,#fff5f0);border:1px solid #c4b5fd;border-radius:10px;font-size:14px;flex-wrap:wrap;}
   .svc-advisor-bar-icon{font-size:22px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;background:#fff;border-radius:8px;flex-shrink:0;}
-  .svc-advisor-bar-text{color:var(--text);flex:1;}
+  .svc-advisor-bar-text{color:var(--text);flex:none;}
   .svc-advisor-bar-text b{color:var(--svc-primary);}
   .svc-advisor-bar-clear{font-size:12px;padding:4px 12px;border-radius:6px;cursor:pointer;background:none;border:1px solid var(--line);color:var(--muted);transition:.15s;white-space:nowrap;flex-shrink:0;}
   .svc-advisor-bar-clear:hover{background:#fef2f2;color:#e53935;border-color:#fca5a5;}
+  /* ★ v7.0.8 已选专家/顾问 chips（多选） */
+  .svc-adv-chips{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 auto;min-width:200px;}
+  .svc-adv-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 6px 4px 10px;border-radius:16px;background:#fff;border:1px solid #c4b5fd;font-size:11.5px;color:var(--text);}
+  .svc-adv-chip.is-expert{border-color:#e9d5ff;background:#fdf4ff;}
+  .svc-adv-chip-name{white-space:nowrap;}
+  .svc-adv-chip-x{border:none;background:none;cursor:pointer;color:var(--muted);font-size:11px;padding:0 3px;line-height:1;border-radius:50%;}
+  .svc-adv-chip-x:hover{color:#e53935;background:#fee2e2;}
 
   /* ★ v6.6 推荐顾问区 */
   .svc-rec-advisor-section{background:linear-gradient(135deg,#f8faff,#fff9f0);border:1px solid #d4c8fd;border-radius:12px;padding:16px 18px;margin:12px 0;}
@@ -279,6 +290,13 @@
   .svc-expert-role{font-size:11.5px;color:var(--svc-primary);font-weight:600;margin-bottom:4px;}
   .svc-expert-note{font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:6px;}
   .svc-expert-cta{font-size:11px;color:var(--daily);font-weight:600;text-align:right;}
+  /* ★ v7.0.8 专家卡片可多选 */
+  .svc-expert-card.picked{background:#f5f3ff;border-color:var(--svc-primary);}
+  .svc-expert-card.picked:hover{transform:translateY(-3px);}
+  .svc-expert-check{position:absolute;top:8px;right:10px;width:21px;height:21px;border-radius:50%;background:#fff;border:1.5px solid var(--line);font-size:11px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700;transition:.15s;}
+  .svc-expert-card.picked .svc-expert-check{background:var(--svc-primary);border-color:var(--svc-primary);color:#fff;}
+  .svc-expert-more{display:block;margin-top:6px;padding-top:5px;border-top:1px dashed var(--line);font-size:10.5px;color:var(--svc-primary);cursor:pointer;text-align:right;}
+  .svc-expert-more:hover{text-decoration:underline;}
 
   /* ★ v7.0 专案专家说明（价格另算） */
   .svc-project-expert-notice{background:#fffbea;border:1px solid #fcd34d;border-left:4px solid #f59e0b;border-radius:10px;padding:16px 18px;margin:12px 0;}

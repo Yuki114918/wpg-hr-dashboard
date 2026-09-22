@@ -126,6 +126,236 @@
     return !!(ex && ex.scope === 'project');
   }
 
+  // ══════════════ ★ v7.0.8 多选专家/顾问 ══════════════
+  //  客户可在服务页同时点选多位专家/顾问，「需求内容」按各自承接的服务分组显示。
+  //  · svcAdvisors 为唯一真源（按点选顺序）；advisorPerson 同步为最后一位，兼容既有单选逻辑。
+  //  · 归属判定：优先「该服务模块方向工时最高」的选中人；均无工时时兜底给第一位非专案专家。
+  function _normalizeAdvisors() {
+    var arr = (state.svcAdvisors || []).slice();
+    var p = state.advisorPerson || '';
+    // 旧的单选赋值（从顾问页/图表跳转过来）优先：单选人不在多选集合里时，以单选人为准
+    if (p && arr.indexOf(p) < 0) arr = [p];
+    if (!p && arr.length) p = arr[arr.length - 1];
+    state.svcAdvisors = arr;
+    state.advisorPerson = p;
+    return arr;
+  }
+  function getSelectedAdvisors() {
+    return (state.svcAdvisors || []).slice();
+  }
+  function setAdvisorSingle(p) {
+    state.svcAdvisors = p ? [p] : [];
+    state.advisorPerson = p || '';
+    return state.svcAdvisors;
+  }
+  function clearAdvisors() {
+    state.svcAdvisors = [];
+    state.advisorPerson = '';
+  }
+  // 点选 / 再点取消某位专家或顾问
+  function toggleAdvisor(p) {
+    if (!p) return getSelectedAdvisors();
+    var arr = (state.svcAdvisors || []).slice();
+    var i = arr.indexOf(p);
+    if (i >= 0) arr.splice(i, 1); else arr.push(p);
+    state.svcAdvisors = arr;
+    state.advisorPerson = arr.length ? arr[arr.length - 1] : '';
+    return arr;
+  }
+  // 某人可承接的报价服务
+  //  · SDC 共享中心专家（Yuki / Queenie）：匹配所有业务 → 全部服务
+  //  · 专案专家（Chris Zhang / Roc Tian）：单一专案、价格另算 → 不参与标准报价清单
+  //  · 其余顾问：按其实际工作范围（工时专精）匹配
+  function advisorCapableServices(person) {
+    if (!person) return [];
+    if (isProjectExpert(person)) return [];
+    if (isAllScopeExpert(person)) return QUOTE_SERVICES.slice();
+    var prof = getAdvisorProfile(person);
+    if (!prof) return [];
+    return matchServicesByTags([], prof);
+  }
+  // 选中人在该报价模块方向上的工时之和（用于判定主承接人）
+  function _advisorModuleScore(person, svcModule) {
+    var hrMods = QUOTE_TO_HR[svcModule] || [];
+    if (!hrMods.length) return 0;
+    var prof = getAdvisorProfile(person);
+    if (!prof) return 0;
+    var score = 0;
+    hrMods.forEach(function (hm) { score += (prof.modHours[hm] || 0); });
+    return score;
+  }
+  // 全 scope 专家（Yuki / Queenie）可承接全部服务但不按专精模块计分，
+  // 故给一个非负基线分：专精顾问在其工作范围内恒高于基线，全 scope 专家作为兜底承接人。
+  var _ALLSCOPE_BASE = 1;
+  // ★ 单项的「自然主承接人」（未做均衡分配前的偏好归属）
+  function _naturalOwnerOf(s) {
+    if (!s) return '';
+    var advs = getSelectedAdvisors();
+    if (!advs.length) return '';
+    if (advs.length === 1) return advs[0];
+    var best = '', bestScore = -1;
+    advs.forEach(function (p) {
+      if (isProjectExpert(p)) return;                    // 专案专家不承接标准报价服务
+      if (!isAllScopeExpert(p)) {
+        if (advisorCapableServices(p).indexOf(s) < 0) return;   // 该人工作范围不含此项
+      }
+      var score = isAllScopeExpert(p)
+        ? _ALLSCOPE_BASE
+        : (1000 + _advisorModuleScore(p, s.module));      // 专精顾问在其范围内恒高于全 scope 基线
+      if (score > bestScore) { bestScore = score; best = p; }
+    });
+    if (!best) {                                         // 无合格承接人 → 兜底给第一位非专案专家
+      for (var i = 0; i < advs.length; i++) {
+        if (!isProjectExpert(advs[i])) { best = advs[i]; break; }
+      }
+    }
+    return best;
+  }
+  // ★ 均衡分配：保证每位「可承接标准报价」的选中人至少分到 1 项（避免出现空组），
+  //   仅在存在空组时，从当前最大组中挪 1 项补足，不改变服务总数。
+  function _balanceOwners(natural, advs) {
+    var map = {};
+    Object.keys(natural).forEach(function (k) { map[k] = natural[k]; });
+    var assignable = advs.filter(function (p) { return !isProjectExpert(p); });
+    function _groups() {
+      var g = {};
+      Object.keys(map).forEach(function (idx) {
+        var o = map[idx]; if (!o) return;
+        (g[o] = g[o] || []).push(idx);
+      });
+      return g;
+    }
+    function _empties() {
+      var g = _groups();
+      return assignable.filter(function (p) { return !g[p] || !g[p].length; });
+    }
+    var guard = 0;
+    while (guard < 2000) {
+      guard++;
+      var emp = _empties();
+      if (!emp.length) break;
+      var needy = emp[0];
+      var g = _groups();
+      var donors = assignable.filter(function (p) { return g[p] && g[p].length > 1; });
+      if (!donors.length) donors = assignable.filter(function (p) { return g[p] && g[p].length > 0; });
+      if (!donors.length) break;
+      donors.sort(function (a, b) { return g[b].length - g[a].length; });   // 从最大组挪
+      var donor = donors[0];
+      var item = g[donor].pop();
+      map[item] = needy;
+    }
+    return map;
+  }
+  // 已选集合 × 已选服务 → 每项服务的最终承接人（带均衡分配；缓存避免重渲染重复计算）
+  var _ownerMapKey = '', _ownerMapVal = null;
+  function _svcOwnerMap() {
+    var advs = getSelectedAdvisors();
+    var svcKey = [];
+    state.selectedServices.forEach(function (v) { svcKey.push(v); });
+    svcKey.sort(function (a, b) { return a - b; });
+    var key = advs.join('|') + '#' + svcKey.join(',');
+    if (_ownerMapKey === key && _ownerMapVal) return _ownerMapVal;
+    var map = {};
+    if (advs.length <= 1) {
+      var sole = advs[0] || '';
+      state.selectedServices.forEach(function (idx) { map[idx] = sole; });
+    } else {
+      var natural = {};
+      state.selectedServices.forEach(function (idx) {
+        var s = QUOTE_SERVICES[idx];
+        if (s) natural[idx] = _naturalOwnerOf(s);
+      });
+      map = _balanceOwners(natural, advs);
+    }
+    _ownerMapKey = key; _ownerMapVal = map;
+    return map;
+  }
+  // ★ 单项服务的「主承接人」：多选时返回均衡后的归属（与需求单三处渲染保持一致）
+  function svcOwnerOf(s) {
+    if (!s) return '';
+    var advs = getSelectedAdvisors();
+    if (advs.length <= 1) return advs[0] || '';
+    var idx = QUOTE_SERVICES.indexOf(s);
+    if (idx < 0) return _naturalOwnerOf(s);
+    var map = _svcOwnerMap();
+    return (map[idx] != null) ? map[idx] : '';
+  }
+  // ★ 已选服务按承接人分组（组顺序 = 客户点选顺序，未归属的置末）
+  function groupSelectedByOwner() {
+    var advs = getSelectedAdvisors();
+    var idxList = [];
+    state.selectedServices.forEach(function (v) { idxList.push(v); });
+    idxList.sort(function (a, b) { return a - b; });
+    var multi = advs.length > 1;
+    var map = {};
+    idxList.forEach(function (idx) {
+      var s = QUOTE_SERVICES[idx];
+      if (!s) return;
+      var owner = multi ? svcOwnerOf(s) : (advs[0] || '');
+      var key = owner || '__none__';
+      if (!map[key]) map[key] = { person: owner, items: [] };
+      map[key].items.push({ idx: idx, s: s, qty: state.serviceQuantities[idx] || 1 });
+    });
+    var groups = [];
+    advs.forEach(function (p) { if (map[p]) { groups.push(map[p]); delete map[p]; } });
+    if (map['__none__']) { groups.push(map['__none__']); delete map['__none__']; }
+    Object.keys(map).forEach(function (k) { groups.push(map[k]); });
+    return groups;
+  }
+  // 承接人展示文案
+  function ownerLabelPlain(person) {
+    if (!person) return '未指定承接人';
+    var ex = getExpertInfo(person);
+    if (ex) return person + ' · ' + ex.role + '（' + ex.tag + '）';
+    return person + ' · ' + personRoleLabel(person);
+  }
+  function ownerLabelRich(person) {
+    if (!person) return '👥 未指定承接人';
+    var ex = getExpertInfo(person);
+    var icon = (getPersonIcon(person) || {}).icon || '👤';
+    if (ex) return icon + ' ' + person + ' · ' + ex.role + '（' + ex.tag + '）';
+    return icon + ' ' + person + ' · ' + personRoleLabel(person);
+  }
+  // 表格单元格用的短文案（姓名 + 专家身份标签）
+  function ownerLabelShort(person) {
+    if (!person) return '待指定';
+    var ex = getExpertInfo(person);
+    return ex ? (person + '（' + ex.tag + '）') : person;
+  }
+  // 当前选中专家/顾问的概述文案（供需求单抬头使用）
+  function advisorSummaryText() {
+    var advs = getSelectedAdvisors();
+    if (!advs.length) return '待指定（由 SDC 共享中心统一派单）';
+    return advs.map(function (p) { return ownerLabelPlain(p); }).join('；');
+  }
+  // ★ v7.0.8 多选派生口径（渲染期共用）
+  //  · 全部选中人都是专案专家 → 走专案需求单分支
+  function allSelectedAreProjectExperts() {
+    var advs = getSelectedAdvisors();
+    if (!advs.length) return false;
+    for (var i = 0; i < advs.length; i++) { if (!isProjectExpert(advs[i])) return false; }
+    return true;
+  }
+  //  · 选中集合里是否含专家（用于决定是否隐藏「全 HR 工时」联动图）
+  function selectedHasExpert() {
+    var advs = getSelectedAdvisors();
+    for (var i = 0; i < advs.length; i++) { if (getExpertInfo(advs[i])) return true; }
+    return false;
+  }
+  //  · 多选时各人可承接服务的并集（按选择集合缓存，避免重渲染反复重匹配）
+  var _advUnionKey = '', _advUnionVal = null;
+  function selectedAdvisorServiceUnion() {
+    var advs = getSelectedAdvisors();
+    var key = advs.join('|');
+    if (_advUnionKey === key && _advUnionVal) return _advUnionVal;
+    var u = [];
+    advs.forEach(function (p) {
+      advisorCapableServices(p).forEach(function (s) { if (u.indexOf(s) < 0) u.push(s); });
+    });
+    _advUnionKey = key; _advUnionVal = u;
+    return u;
+  }
+
   // ★ 顾问英文名短名（用于介绍页团队墙显示）
   var EN_NAME_MAP = {
     'Bill Tsang': 'Bill', 'Cako Yang': 'Cako', 'Chloe Fang': 'Chloe',
@@ -300,7 +530,9 @@
     customHours: '',
     feeType: 'total',
     customFee: '',
-    advisorPerson: '',          // ★ 当前查看的顾问
+    advisorPerson: '',          // ★ 当前查看的顾问（单选口径，由 svcAdvisors 最后一位同步而来）
+    // ★ v7.0.8 多选专家/顾问（按客户点选顺序）—— 需求内容按承接人分组显示
+    svcAdvisors: [],
     svcTagFilters: [],          // ★ v5.4 标签筛选（从顾问页多选带入）
     calcSearch: '',             // ★ v6.1 计费区搜索关键词
     calcPricingFilter: '',       // ★ v6.1 计费区计费模式筛选
@@ -333,7 +565,7 @@
   function selectServiceModule(mod) {
     state.svcModule = mod || 'all';
     state.svcMode = 'priced';
-    state.advisorPerson = '';
+    clearAdvisors();
     state.svcTagFilters = [];
     switchPage('services');
   }
@@ -985,7 +1217,7 @@
       ctaArea.innerHTML = '<button class="land-btn detail-cta-btn detail-cta-primary" style="width:100%;max-width:400px;margin:16px auto;">' +
         '查看 ' + p.split(' ')[0] + ' 可承接的服务 (' + matchedSvc.length + '项) →</button>';
       ctaArea.querySelector('.detail-cta-btn').addEventListener('click', function(){
-        state.advisorPerson = p;
+        setAdvisorSingle(p);
         state.svcTagFilters = [];  // 清空标签，用人员维度
         state.svcModule = 'all';  // 重置模块筛选避免残留
         switchPage('services');
@@ -1135,20 +1367,35 @@
     hero.innerHTML = '<div class="svc-hero-inner"><h2>HR 共享服务中心 · 服务产品目录</h2><p>专业 · 合规 · 高效 — 一站式 HR 服务解决方案</p></div>';
     wrap.appendChild(hero);
 
-    // ★ v6.4 当前顾问指示条（从顾问页跳转过来时显示）
-    if(state.advisorPerson) {
+    // ★ v7.0.8 已选专家/顾问指示条（支持多选；从顾问页跳转过来时为单选）
+    var selAdvs = _normalizeAdvisors();
+    var selAllProj = allSelectedAreProjectExperts();
+    var selHasExpert = selectedHasExpert();
+    if(selAdvs.length) {
       var advBar = el('div', 'svc-advisor-bar');
-      var advIcon = getPersonIcon(state.advisorPerson);
-      var curExpert = getExpertInfo(state.advisorPerson);
-      advBar.innerHTML = '<span class="svc-advisor-bar-icon">' + advIcon.icon + '</span>' +
-        '<span class="svc-advisor-bar-text">' + (curExpert ? '当前专家' : '当前顾问') + '：<b>' + state.advisorPerson + '</b> (' +
-          (curExpert ? (curExpert.role + ' · ' + curExpert.note) : personRoleLabel(state.advisorPerson)) + ')</span>' +
-        '<button class="svc-advisor-bar-clear" id="svcAdvClear">✕ 切换顾问</button>';
+      var chips = selAdvs.map(function(p){
+        var curEx = getExpertInfo(p);
+        return '<span class="svc-adv-chip' + (curEx ? ' is-expert' : '') + '">' +
+          '<span class="svc-adv-chip-name">' + ownerLabelRich(p) + '</span>' +
+          '<button class="svc-adv-chip-x" data-drop="' + p + '" title="移除">✕</button></span>';
+      }).join('');
+      advBar.innerHTML = '<span class="svc-advisor-bar-text">✅ 已选 <b>' + selAdvs.length + '</b> 位承接' +
+        (selAdvs.length > 1 ? '（需求内容将按人分组显示）' : '') + '：</span>' +
+        '<span class="svc-adv-chips">' + chips + '</span>' +
+        '<button class="svc-advisor-bar-clear" id="svcAdvClear">✕ 清空</button>';
       wrap.appendChild(advBar);
       // 延迟绑定（因为元素刚插入DOM）
       setTimeout(function(){
+        var bar = document.querySelector('.svc-advisor-bar');
+        if(bar) bar.addEventListener('click', function(e){
+          var t = e.target;
+          if(t && t.getAttribute && t.getAttribute('data-drop')){
+            toggleAdvisor(t.getAttribute('data-drop'));
+            renderServices();
+          }
+        });
         var clr = document.getElementById('svcAdvClear');
-        if(clr) clr.addEventListener('click', function(){ state.advisorPerson = ''; renderServices(); });
+        if(clr) clr.addEventListener('click', function(){ clearAdvisors(); renderServices(); });
       }, 0);
     }
 
@@ -1174,7 +1421,7 @@
             '<div class="svc-rec-desc">在该方向投入工时最多，可承接 <b>' + ra.matchCount + '</b> 项相关服务</div>' +
             '<div class="svc-rec-cta">查看详细介绍 →</div>';
           card.addEventListener('click', function(){
-            state.advisorPerson = ra.person;
+            setAdvisorSingle(ra.person);
             switchPage('advisor');
           });
           recGrid.appendChild(card);
@@ -1184,45 +1431,67 @@
     }
 
     // ★ v7.0 专家团队区（SDC 共享中心专家 · 匹配所有业务 / 专案专家 · 价格另算）
+    //   ★ v7.0.8 可多选：点卡片 = 选中/取消；「查看详情 →」= 跳顾问介绍页（单选口径）
     var expSec = el('div', 'svc-expert-section');
-    expSec.appendChild(el('div', 'svc-expert-title', '🏢 专家团队 — SDC 共享中心 & 专案专家'));
+    expSec.appendChild(el('div', 'svc-expert-title', '🏢 专家团队 — SDC 共享中心 & 专案专家（可多选，需求内容按人分组）'));
     var expGrid = el('div', 'svc-expert-grid');
     EXPERT_TEAM.forEach(function (ex) {
-      var card = el('div', 'svc-expert-card svc-expert-card-' + (ex.scope === 'all' ? 'sdc' : 'proj'));
+      var picked = selAdvs.indexOf(ex.name) >= 0;
+      var card = el('div', 'svc-expert-card svc-expert-card-' + (ex.scope === 'all' ? 'sdc' : 'proj') + (picked ? ' picked' : ''));
       card.style.borderLeftColor = ex.color;
       card.setAttribute('data-expert', ex.name);
+      if(picked) { card.style.boxShadow = '0 0 0 2px ' + ex.color + '66'; }
       card.innerHTML =
+        '<span class="svc-expert-check">' + (picked ? '✔' : '＋') + '</span>' +
         '<div class="svc-expert-badge" style="background:' + ex.color + '1a;color:' + ex.color + ';border-color:' + ex.color + '66">' + ex.tag + '</div>' +
         '<div class="svc-expert-name">' + ex.icon + ' ' + ex.name + '</div>' +
         '<div class="svc-expert-role">' + ex.role + '</div>' +
         '<div class="svc-expert-note">' + ex.note + '</div>' +
-        '<div class="svc-expert-cta">' + (ex.scope === 'all' ? '查看全部可承接服务 →' : '查看专案服务说明 →') + '</div>';
-      card.addEventListener('click', function () {
-        state.advisorPerson = ex.name;
+        '<div class="svc-expert-cta">' + (picked ? '✔ 已选（点击取消）' : '＋ 点选该专家承接') + '</div>' +
+        '<span class="svc-expert-more" data-detail="' + ex.name + '">查看详情 →</span>';
+      card.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t && t.getAttribute && t.getAttribute('data-detail')) {
+          setAdvisorSingle(ex.name);       // 查看详情走单选口径
+          state.svcModule = 'all';
+          state.svcTagFilters = [];
+          switchPage('advisor');
+          return;
+        }
+        toggleAdvisor(ex.name);
         state.svcModule = 'all';           // 专家口径独立，清掉模块/标签残留
         state.svcTagFilters = [];
-        switchPage('services');
+        renderServices();
       });
       expGrid.appendChild(card);
     });
     expSec.appendChild(expGrid);
     wrap.appendChild(expSec);
 
-    // ★ 接单 HR 选择区（点击名字跳转顾问介绍页）
+    // ★ 接单 HR 选择区（★ v7.0.8 改为可多选；「↗」跳转顾问介绍页）
     var hrPick = el('div', 'hr-pick-section');
-    hrPick.innerHTML = '<div class="hr-pick-label">👤 请选择你的顾问（点击查看详细介绍与服务承接能力）</div>';
+    hrPick.innerHTML = '<div class="hr-pick-label">👤 请选择你的顾问（可多选，选多位时需求内容按人分组；「↗」查看详细介绍）</div>';
     var hrPickGrid = el('div', 'hr-pick-grid');
     META.persons.forEach(function (p) {
       var av = AVATAR_MAP[p] || { bg: '#999' };
       // ★ v6.5 去除接单HR按钮图标前缀，仅显示全名
-      var isActive = (state.svcHR === p || state.advisorPerson === p);
+      var isActive = selAdvs.indexOf(p) >= 0;
+      var item = el('span', 'hr-pick-item');
       var btn = el('button', 'hr-pick-btn' + (isActive ? ' active' : ''), p);
       btn.style.borderColor = isActive ? av.bg : '';
       btn.addEventListener('click', function () {
-        state.advisorPerson = p;
+        toggleAdvisor(p);
+        renderServices();
+      });
+      var more = el('button', 'hr-pick-more', '↗');
+      more.title = '查看 ' + p + ' 的详细介绍与服务承接能力';
+      more.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setAdvisorSingle(p);
         switchPage('advisor');
       });
-      hrPickGrid.appendChild(btn);
+      item.appendChild(btn); item.appendChild(more);
+      hrPickGrid.appendChild(item);
     });
     hrPick.appendChild(hrPickGrid);
     wrap.appendChild(hrPick);
@@ -1256,11 +1525,16 @@
     //   不再叠加「顾问能力 ∩ 模块」的交集 —— 旧逻辑里顾问专精与所选模块不一致时交集为空，
     //   会出现「选了模块 → 计费区一个服务都没有」的问题。
     var moduleLocked = !!(state.svcModule && state.svcModule !== 'all');
-    var isAllExpert = state.advisorPerson ? isAllScopeExpert(state.advisorPerson) : false;   // SDC 专家：匹配所有业务
-    var isProjExpert = state.advisorPerson ? isProjectExpert(state.advisorPerson) : false;   // 专案专家：价格另算
-    var advProf = state.advisorPerson ? getAdvisorProfile(state.advisorPerson) : null;
+    // ★ v7.0.8 多选口径：仅在「全部选中人都是专案专家」时才走专案需求单分支
+    var isAllExpert = selAdvs.length === 1 && isAllScopeExpert(selAdvs[0]);   // SDC 专家：匹配所有业务
+    var isProjExpert = selAllProj;                                            // 专案专家：价格另算
+    var advProf = selAdvs.length === 1 ? getAdvisorProfile(selAdvs[0]) : null;
     var pricedServices = QUOTE_SERVICES.filter(function(s){ return s.price != null && s.price !== ''; });
-    if(advProf && !moduleLocked && !isAllExpert && !isProjExpert) {
+    if(selAdvs.length > 1 && !moduleLocked) {
+      // ★ v7.0.8 多选：显示各选中人可承接服务的并集
+      var _un = selectedAdvisorServiceUnion();
+      pricedServices = pricedServices.filter(function(s){ return _un.indexOf(s) >= 0; });
+    } else if(advProf && !moduleLocked && !isAllExpert && !isProjExpert) {
       var advCapable = matchServicesByTags([], advProf);  // 通用标签+profile = 该人工作范围内全部服务
       pricedServices = pricedServices.filter(function(s){ return advCapable.indexOf(s) >= 0; });
     }
@@ -1356,7 +1630,7 @@
 
     // ★ v7.0 专案专家（Chris / Roc）：单一专案内容，不适用标准报价单
     if(isProjExpert) {
-      var projExp = getExpertInfo(state.advisorPerson);
+      var projExp = getExpertInfo(selAdvs[0]);
       var _speNo = _reqOrderNo();
       var projNotice = el('div', 'svc-project-expert-notice');
       projNotice.innerHTML =
@@ -1447,7 +1721,7 @@
       }
       // 生成需求单纯文本
       function _speBuildText(d){
-        var exp = getExpertInfo(state.advisorPerson);
+        var exp = getExpertInfo(selAdvs[0]);
         return [
           REQ_MAIL_HEADER,                          // ★ v7.0.5 邮件抬头
           '【专案需求单】' + _speNo,
@@ -1495,7 +1769,7 @@
         if (this.disabled) return;
         var txt = _rOutText.value;
         if(!txt){ _speHint('⚠️ 请先点击「生成需求单」', 'err'); return; }
-        var expN = getExpertInfo(state.advisorPerson);
+        var expN = getExpertInfo(selAdvs[0]);
         // ★ v7.0.5 标题不带【】，抬头由 _deliverReqMail 统一加「中国区人资服务接单中心」
         _deliverReqMail('专案需求单 ' + _speNo + (expN ? ' — ' + expN.name : ''), txt, { btn: this, hint: _speHint });
       });
@@ -1510,7 +1784,7 @@
         var d = _speCollect();
         var err = _speCheck(d);
         if(err){ _speHint('⚠️ ' + err, 'err'); _speFocusByErr(err); return; }
-        var html = buildProjectReqPrintHTML(d, getExpertInfo(state.advisorPerson), _speNo, _todayCN());
+        var html = buildProjectReqPrintHTML(d, getExpertInfo(selAdvs[0]), _speNo, _todayCN());
         var pw = window.open('', '_blank');
         if(!pw){ _speHint('⚠️ 浏览器拦截了打印窗口，请允许弹窗后重试', 'err'); return; }
         pw.document.write(html);
@@ -1519,7 +1793,7 @@
       });
 
       projNotice.querySelector('.spe-notice-btn').addEventListener('click', function(){
-        state.advisorPerson = 'Yuki';
+        setAdvisorSingle('Yuki');
         state.svcModule = 'all';
         state.svcTagFilters = [];
         renderServices();
@@ -1786,7 +2060,7 @@
     // ★ v7.0 模块下拉影响计费区范围，改为整页重渲染确保计费区同步
     modSel.addEventListener('change', function () {
       state.svcModule = modSel.value;
-      state.advisorPerson = '';          // 模块口径独立，清掉顾问残留
+      clearAdvisors();                   // 模块口径独立，清掉顾问残留
       state.svcTagFilters = [];
       renderServices();
     });
@@ -1842,7 +2116,7 @@
     // ★ v7.0.2 底部联动图表 —— 仅查看「顾问」时显示；查看专家团队时隐藏
     //   专家（SDC 共享中心专家 / 专案专家）的职责口径与「全 HR 工时分布」无关，
     //   显示反而干扰阅读，故选中专家时不渲染该区块。
-    if (!getExpertInfo(state.advisorPerson)) {
+    if (!selHasExpert) {
       wrap.appendChild(el('div', 'section-title', '🔗 服务 ↔ 负责人员 联动'));
       var linkGrid = el('div', 'chart-grid');
       linkGrid.appendChild(chartBox('svc_module_hours', '各服务模块对应 HR 工时分布'));
@@ -1856,8 +2130,8 @@
     var area = document.getElementById('svc_cards'); if (!area) return; area.innerHTML = '';
 
     // ★ v7.0 专案专家：标准报价目录不适用，改为专案说明卡
-    if(isProjectExpert(state.advisorPerson)) {
-      var pex = getExpertInfo(state.advisorPerson);
+    if(allSelectedAreProjectExperts()) {
+      var pex = getExpertInfo(getSelectedAdvisors()[0]);
       var pexBox = el('div', 'svc-project-expert-notice');
       pexBox.innerHTML =
         '<div class="spe-notice-head">' + pex.icon + ' ' + pex.name + ' · ' + pex.role + '</div>' +
@@ -1868,10 +2142,14 @@
 
     // ★ v5.4 标签筛选：如果从顾问页带入了标签，用 matchServicesByTags 过滤（带顾问profile）
     var tagFiltered = null;
-    var advProf = state.advisorPerson ? getAdvisorProfile(state.advisorPerson) : null;
+    var _selAdvs = getSelectedAdvisors();
+    var _singleAdv = _selAdvs.length === 1 ? _selAdvs[0] : '';
+    var advProf = _singleAdv ? getAdvisorProfile(_singleAdv) : null;
     // ★ v7.0 模块优先 / SDC 共享中心专家（匹配所有业务）：不再叠加顾问工作范围过滤
     var moduleLocked = !!(state.svcModule && state.svcModule !== 'all');
-    var skipAdvisorScope = moduleLocked || isAllScopeExpert(state.advisorPerson);
+    // ★ v7.0.8 多选：改用「各人可承接服务的并集」过滤
+    var multiScope = (_selAdvs.length > 1 && !moduleLocked) ? selectedAdvisorServiceUnion() : null;
+    var skipAdvisorScope = moduleLocked || _selAdvs.length > 1 || (_singleAdv ? isAllScopeExpert(_singleAdv) : false);
     // ★ v5.6 有 advisorPerson 时，即使无标签也按该人工作范围过滤
     var personScope = null;
     if(advProf && !skipAdvisorScope && (!state.svcTagFilters || state.svcTagFilters.length === 0)) {
@@ -1892,6 +2170,8 @@
       if (state.svcSearch) { var q = state.svcSearch.toLowerCase(); return (s.content + s.item + s.module).toLowerCase().indexOf(q) >= 0; }
       // ★ v5.4 标签筛选
       if(tagFiltered && tagFiltered.indexOf(s) < 0) return false;
+      // ★ v7.0.8 多选：只保留任一选中人可承接的服务
+      if(multiScope && multiScope.indexOf(s) < 0) return false;
       // ★ v5.6 顾问工作范围过滤（无标签时）
       if(personScope && personScope.indexOf(s) < 0) return false;
       return true;
@@ -2158,11 +2438,32 @@
     lines.push('');
     lines.push('一、服务需求清单');
     var total = 0, n = 0;
+    // ★ v7.0.8 承接专家/顾问（多选时下方清单按人分组）
+    var _advs = getSelectedAdvisors();
+    if(_advs.length) lines.push('承接专家/顾问：' + _advs.map(function(p){ return ownerLabelPlain(p); }).join('；'));
     // 注意：selectedServices 是 Set，Set 无 length 属性，
     // 不能用 Array.prototype.slice.call 转数组（会得到空数组），须显式收集。
     var idxList = [];
     state.selectedServices.forEach(function(v){ idxList.push(v); });
     idxList.sort(function(a, b){ return a - b; });
+    if(_advs.length > 1){
+      // ★ v7.0.8 多选：按承接人分组列出
+      groupSelectedByOwner().forEach(function(g, gi){
+        if(gi > 0) lines.push('');
+        lines.push('【承接：' + ownerLabelPlain(g.person) + '】');
+        g.items.forEach(function(it){
+          n++;
+          var sub = (Number(it.s.price) || 0) * it.qty;
+          total += sub;
+          var specTxt = String(it.s.spec || '').trim();
+          var priceTxt = (it.s.price == null || it.s.price === '')
+            ? '按需定制'
+            : ('¥' + it.s.price + (specTxt ? '/' + specTxt : ''));
+          lines.push('  ' + n + '. ' + (it.s.item || it.s.content) + '　× ' + it.qty + '　' +
+            priceTxt + '　小计 ¥' + fmt(sub, 0));
+        });
+      });
+    } else {
     idxList.forEach(function(idx){
       var s = QUOTE_SERVICES[idx];
       if(!s) return;
@@ -2178,6 +2479,7 @@
       lines.push(n + '. ' + (s.item || s.content) + '　× ' + qty + '　' +
         priceTxt + '　小计 ¥' + fmt(sub, 0));
     });
+    }
     if(n === 0) lines.push('（尚未勾选任何服务）');
     lines.push('');
     lines.push('二、预算报价');
@@ -2207,10 +2509,28 @@
   // ★ v7.0.5 服务需求单「需求内容」自动摘要（代入上方已选服务，作为需求内容栏与打印版正文）
   function _svcReqContentDigest(){
     var out = [];
+    var advs = getSelectedAdvisors();
+    var n = 0;
+    // ★ v7.0.8 选了多位专家/顾问时，按「承接人」分组显示
+    if(advs.length > 1){
+      var _groups = groupSelectedByOwner();
+      if(!_groups.length){ out.push('（尚未勾选任何服务）'); return out.join('\n'); }
+      _groups.forEach(function(g, gi){
+        if(gi > 0) out.push('');
+        out.push('【' + ownerLabelRich(g.person) + '】');
+        g.items.forEach(function(it){
+          n++;
+          var specTxt = String(it.s.spec || '').trim();
+          out.push('  ' + n + '. ' + (it.s.item || it.s.content) + '　× ' + it.qty +
+            (specTxt ? '（' + specTxt + '）' : ''));
+        });
+      });
+      return out.join('\n');
+    }
+    // 单选 / 未选：保持原有平铺清单格式
     var idxList = [];
     state.selectedServices.forEach(function(v){ idxList.push(v); });
     idxList.sort(function(a, b){ return a - b; });
-    var n = 0;
     idxList.forEach(function(idx){
       var s = QUOTE_SERVICES[idx];
       if(!s) return;
@@ -2296,17 +2616,24 @@
       var specTxt = String(s.spec || '').trim();
       var priceTxt = (s.price == null || s.price === '') ? '按需定制'
         : ('¥' + s.price + (specTxt ? '/' + specTxt : ''));
+      // ★ v7.0.8 增加「承接人」列 —— 多选时每项服务标明由谁承接
       svcTrs += '<tr><td class="c">' + n + '</td><td>' + _escHtml(s.item || s.content) + '</td>' +
+        '<td class="c">' + _escHtml(ownerLabelShort(svcOwnerOf(s))) + '</td>' +
         '<td class="c">' + qty + '</td><td class="c">' + _escHtml(priceTxt) + '</td>' +
         '<td class="r">¥' + _escHtml(fmt(sub, 0)) + '</td></tr>';
     });
-    if(!n) svcTrs = '<tr><td colspan="5" class="c">（尚未勾选任何服务）</td></tr>';
+    if(!n) svcTrs = '<tr><td colspan="6" class="c">（尚未勾选任何服务）</td></tr>';
     var feeType = state.feeType || 'total';
     var quoteTxt;
     if(feeType === 'custom') quoteTxt = '¥' + (state.customFee || '0') + '（自定义金额）';
     else if(feeType === 'monthly') quoteTxt = '¥' + fmt(total / 12, 0) + '（月度预估 · ' + n + ' 项服务 ÷ 12 月）';
     else quoteTxt = '¥' + fmt(total, 0) + '（服务报价总计 · 已选 ' + n + ' 项服务）';
 
+    // ★ v7.0.8 承接专家/顾问汇总行（放在清单表上方）
+    var _pAdvs = getSelectedAdvisors();
+    var ownerLine = _pAdvs.length
+      ? '<div class="ownerline">承接专家/顾问：<b>' + _escHtml(_pAdvs.map(function(p){ return ownerLabelPlain(p); }).join('；')) + '</b></div>'
+      : '';
     var infoRows = [
       ['联系人', _escHtml(info.name || '待确认')],
       ['联系方式', _escHtml(info.contact || '待确认')],
@@ -2338,6 +2665,8 @@
       'td{padding:10px 13px;border:1px solid #e2e8f0;white-space:pre-wrap;word-break:break-word;}' +
       'thead th{width:auto;background:#eef2ff;color:#3730a3;}' +
       'td.c{text-align:center;white-space:nowrap;}td.r{text-align:right;white-space:nowrap;font-weight:600;}' +
+      '.ownerline{font-size:12.5px;color:#3730a3;background:#eef2ff;border:1px solid #c7d2fe;' +
+        'border-radius:6px;padding:9px 13px;margin-bottom:10px;line-height:1.75;}' +
       '.foot{font-size:11.5px;color:#64748b;line-height:1.85;border-top:1px dashed #cbd5e1;padding-top:14px;}' +
       '@page{margin:12mm;}' +
       '@media print{.noprint{display:none;} body{padding:0;}}' +
@@ -2349,7 +2678,8 @@
       '<div class="meta">单号：<b>' + _escHtml(orderNo) + '</b> &nbsp;|&nbsp; 日期：<b>' + _escHtml(dateStr) + '</b>' +
         ' &nbsp;|&nbsp; 呈送：<b>中国区人资服务接单中心</b></div>' +
       '<div class="sec">一、服务需求清单</div>' +
-      '<table><thead><tr><th>#</th><th>服务项目</th><th>数量</th><th>单价</th><th>小计</th></tr></thead>' +
+      ownerLine +
+      '<table><thead><tr><th>#</th><th>服务项目</th><th>承接人</th><th>数量</th><th>单价</th><th>小计</th></tr></thead>' +
         '<tbody>' + svcTrs + '</tbody></table>' +
       '<div class="sec">二、预算报价</div>' +
       '<table><tr><th>费用类型</th><td>' + (feeType === 'custom' ? '自定义金额'
@@ -2476,7 +2806,7 @@
       '<div class="band"></div><h1>HR 服务报价清单</h1>' +
       '<div class="sub">中国人资服务处</div>' +
       '<div class="meta">单号：' + _escHtml(orderNo) + ' &nbsp;|&nbsp; 日期：' + _escHtml(_todayCN()) +
-        (state.advisorPerson ? (' &nbsp;|&nbsp; 专属顾问：' + _escHtml(state.advisorPerson)) : '') + '</div>' +
+        (getSelectedAdvisors().length ? (' &nbsp;|&nbsp; 承接专家/顾问：' + _escHtml(getSelectedAdvisors().join('、'))) : '') + '</div>' +
       '<table><thead><tr><th>#</th><th>服务名称</th><th>所属模块</th><th>计费模式</th><th style="text-align:right">单价</th><th style="text-align:center">数量</th><th style="text-align:right">小计</th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table>' +
       '<div class="sum"><span>费用类型：' + feeLabel + '（已选 ' + state.selectedServices.size + ' 项服务）</span><span class="v">' + feeVal + '</span></div>' +
@@ -2567,7 +2897,7 @@
       doc.setFont(undefined, 'normal');
       doc.setFontSize(11);
       doc.setTextColor(...primaryColor);
-      doc.text(state.advisorPerson, margin + 5, y + 14);
+      doc.text(getSelectedAdvisors().join('、'), margin + 5, y + 14);
 
       var advProf = getAdvisorProfile(state.advisorPerson);
       if (advProf && advProf.topMod) {
@@ -2730,7 +3060,7 @@
     doc.text('本文件由 CN 区 HR 服务指标仪表板自动生成 · 第 ' + doc.internal.getNumberOfPages() + ' 页', pageW - margin, footerY + 1, { align: 'right' });
 
     // ── 文件名（保存动作由 generateServiceQuotePDF 负责） ──
-    var filename = 'WPG-HR服务报价单_' + (state.advisorPerson || '全部') + '_' +
+    var filename = 'WPG-HR服务报价单_' + (getSelectedAdvisors().join('+') || '全部') + '_' +
       today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '.pdf';
     return { doc: doc, filename: filename };
   }
@@ -2848,7 +3178,7 @@
       var btn = el('button', 'advisor-sel-btn' + (p === targetPerson ? ' active' : ''), p.split(' ')[0]);
       if (p === targetPerson) btn.style.borderColor = av.bg || '#999';
       btn.addEventListener('click', function () {
-        state.advisorPerson = p;
+        setAdvisorSingle(p);
         renderAdvisor();
       });
       selScroll.appendChild(btn);
@@ -2860,7 +3190,7 @@
       eBtn.setAttribute('data-expert', ex.name);
       if (ex.name === targetPerson) eBtn.style.borderColor = ex.color;
       eBtn.addEventListener('click', function () {
-        state.advisorPerson = ex.name;
+        setAdvisorSingle(ex.name);
         renderAdvisor();
       });
       selScroll.appendChild(eBtn);
@@ -3173,7 +3503,7 @@
       // ★ 点击名字也跳转到顾问页
       row.style.cursor = 'pointer';
       row.addEventListener('dblclick', function () {
-        state.advisorPerson = p;
+        setAdvisorSingle(p);
         switchPage('advisor');
       });
       sb.appendChild(row);
