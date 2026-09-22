@@ -8,3 +8,11 @@ test_render.js
 .DS_Store
 Thumbs.db
 *.log
+
+# 测试/探针临时产物（test_render.js 每次运行会重新生成）
+_pdf_test.pdf
+_out*.pdf
+_*.txt
+_p*.js
+_*.html
+_probe*.js
