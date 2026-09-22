@@ -304,6 +304,9 @@
     svcTagFilters: [],          // ★ v5.4 标签筛选（从顾问页多选带入）
     calcSearch: '',             // ★ v6.1 计费区搜索关键词
     calcPricingFilter: '',       // ★ v6.1 计费区计费模式筛选
+    // ★ v7.0.5 服务需求单表单（与专案需求单同构：联系人/联系方式/期望交付时间/备注）
+    //   计费区遇搜索等操作会重建 DOM，故表单值入 state，重建后不丢
+    svcReqForm: { name: '', contact: '', due: '', remark: '' },
     prevPage: 'landing'          // ★ v6.3 上一页（用于返回上一步）
   };
 
@@ -1446,6 +1449,7 @@
       function _speBuildText(d){
         var exp = getExpertInfo(state.advisorPerson);
         return [
+          REQ_MAIL_HEADER,                          // ★ v7.0.5 邮件抬头
           '【专案需求单】' + _speNo,
           '日期：' + _todayCN(),
           '委托专家：' + exp.name + '（' + exp.role + '）',
@@ -1492,7 +1496,8 @@
         var txt = _rOutText.value;
         if(!txt){ _speHint('⚠️ 请先点击「生成需求单」', 'err'); return; }
         var expN = getExpertInfo(state.advisorPerson);
-        _deliverReqMail('【专案需求单】' + _speNo + (expN ? ' — ' + expN.name : ''), txt, { btn: this, hint: _speHint });
+        // ★ v7.0.5 标题不带【】，抬头由 _deliverReqMail 统一加「中国区人资服务接单中心」
+        _deliverReqMail('专案需求单 ' + _speNo + (expN ? ' — ' + expN.name : ''), txt, { btn: this, hint: _speHint });
       });
       // 清空
       projNotice.querySelector('#speReqReset').addEventListener('click', function(){
@@ -1615,45 +1620,122 @@
     calcBodyHost.appendChild(pdfBtn);
 
     // ★ v7.0.3：生成需求单 / 一键复制 / 发送邮件（收件邮箱固定 REQ_MAIL_TO）
+    // ★ v7.0.5：与「专案需求单」同构 —— 需求内容自动代入上方已勾选服务、预算报价自动带入上方加总价格，
+    //   另加 联系人 / 联系方式 / 期望交付时间 / 备注（选填）。表单值存入 state，
+    //   计费区因搜索等操作重建 DOM 时不会丢失（沿用 v6.10/v6.11 的教训）。
     var _svcReqSeq = '';
-    var reqBar = el('div', 'svc-req-bar');
-    var reqGen = el('button', 'svc-req-mini svc-req-mini-primary'); reqGen.type = 'button'; reqGen.id = 'svcReqGen';
-    reqGen.textContent = '📝 生成需求单';
-    var reqCopy = el('button', 'svc-req-mini'); reqCopy.type = 'button'; reqCopy.id = 'svcReqCopy';
-    reqCopy.textContent = '📋 一键复制';
-    var reqMail = el('button', 'svc-req-mini'); reqMail.type = 'button'; reqMail.id = 'svcReqMail';
-    reqMail.textContent = '✉️ 发送邮件';
-    var reqHint = el('span', 'svc-req-hint'); reqHint.id = 'svcReqHint';
-    reqBar.appendChild(reqGen); reqBar.appendChild(reqCopy); reqBar.appendChild(reqMail); reqBar.appendChild(reqHint);
-    calcBodyHost.appendChild(reqBar);
+    var _svcForm = state.svcReqForm = state.svcReqForm || { name: '', contact: '', due: '', remark: '' };
 
-    var reqOut = el('div', 'svc-req-output'); reqOut.id = 'svcReqOutput'; reqOut.style.display = 'none';
-    reqOut.innerHTML =
-      '<div class="svc-req-output-head">📄 服务需求单（可复制，或点上方按钮直接发送）</div>' +
-      '<textarea id="svcReqOutputText" class="svc-req-output-text" rows="9" readonly></textarea>' +
-      '<div class="spe-req-mailto">收件人：' + REQ_MAIL_TO + '　·　点击即直接发送</div>';
-    calcBodyHost.appendChild(reqOut);
-    var reqOutText = reqOut.querySelector('#svcReqOutputText');
+    var reqForm = el('div', 'spe-req-form svc-req-form');
+    reqForm.innerHTML =
+      '<div class="spe-req-title">📝 填写服务需求 — 需求内容与预算报价自动代入上方所选，提交后由 SDC 共享中心承接</div>' +
+      '<div class="spe-req-row">' +
+        '<label class="spe-req-label" for="svcReqDesc">需求内容<i class="spe-req-auto">自动代入上方已选服务</i></label>' +
+        '<textarea id="svcReqDesc" class="spe-req-input spe-req-textarea spe-req-input-auto" rows="4" readonly></textarea>' +
+      '</div>' +
+      '<div class="spe-req-2col">' +
+        '<div class="spe-req-row">' +
+          '<label class="spe-req-label" for="svcReqName">联系人<i class="spe-req-auto">选填</i></label>' +
+          '<input type="text" id="svcReqName" class="spe-req-input" placeholder="您的姓名" />' +
+        '</div>' +
+        '<div class="spe-req-row">' +
+          '<label class="spe-req-label" for="svcReqContact">联系方式<i class="spe-req-auto">选填</i></label>' +
+          '<input type="text" id="svcReqContact" class="spe-req-input" placeholder="电话 / 邮箱" />' +
+        '</div>' +
+      '</div>' +
+      '<div class="spe-req-2col">' +
+        '<div class="spe-req-row">' +
+          '<label class="spe-req-label" for="svcReqDue">期望交付时间</label>' +
+          '<input type="date" id="svcReqDue" class="spe-req-input" />' +
+        '</div>' +
+        '<div class="spe-req-row">' +
+          '<label class="spe-req-label" for="svcReqQuote">预算报价<i class="spe-req-auto">自动带入上方加总价格</i></label>' +
+          '<input type="text" id="svcReqQuote" class="spe-req-input spe-req-input-auto" readonly />' +
+        '</div>' +
+      '</div>' +
+      '<div class="spe-req-row">' +
+        '<label class="spe-req-label" for="svcReqRemark">备注</label>' +
+        '<input type="text" id="svcReqRemark" class="spe-req-input" placeholder="补充说明（选填）" />' +
+      '</div>' +
+      '<div class="spe-req-actions">' +
+        '<button class="spe-req-btn spe-req-btn-primary" type="button" id="svcReqGen">生成需求单</button>' +
+        '<button class="spe-req-btn spe-req-btn-ghost" type="button" id="svcReqExport">导出 PDF</button>' +
+        '<button class="mini-btn spe-req-btn-clear" type="button" id="svcReqReset">清空</button>' +
+        '<span class="svc-req-hint" id="svcReqHint"></span>' +
+      '</div>' +
+      '<div class="svc-req-output" id="svcReqOutput" style="display:none;">' +
+        '<div class="svc-req-output-head">📄 服务需求单（可复制，或点右侧按钮直接发送）</div>' +
+        '<textarea id="svcReqOutputText" class="svc-req-output-text" rows="12" readonly></textarea>' +
+        '<div class="spe-req-output-actions">' +
+          '<button class="mini-btn spe-req-output-btn" type="button" id="svcReqCopy">📋 一键复制</button>' +
+          '<button class="mini-btn spe-req-output-btn" type="button" id="svcReqMail">✉️ 发送邮件</button>' +
+          '<span class="spe-req-mailto">收件人：' + REQ_MAIL_TO + '　·　点击即直接发送（抬头：' + REQ_MAIL_HEADER + '）</span>' +
+        '</div>' +
+      '</div>';
+    calcBodyHost.appendChild(reqForm);
+
+    var reqGen = reqForm.querySelector('#svcReqGen');
+    var reqCopy = reqForm.querySelector('#svcReqCopy');
+    var reqMail = reqForm.querySelector('#svcReqMail');
+    var reqExport = reqForm.querySelector('#svcReqExport');
+    var reqReset = reqForm.querySelector('#svcReqReset');
+    var reqHint = reqForm.querySelector('#svcReqHint');
+    var reqOut = reqForm.querySelector('#svcReqOutput');
+    var reqOutText = reqForm.querySelector('#svcReqOutputText');
+    var reqDesc = reqForm.querySelector('#svcReqDesc');
+    var reqName = reqForm.querySelector('#svcReqName');
+    var reqContact = reqForm.querySelector('#svcReqContact');
+    var reqDue = reqForm.querySelector('#svcReqDue');
+    var reqRemark = reqForm.querySelector('#svcReqRemark');
+
+    // 回填表单（重建计费区后保留已填内容）+ 变更即写回 state
+    reqDesc.value = _svcReqContentDigest();
+    reqName.value = _svcForm.name || '';
+    reqContact.value = _svcForm.contact || '';
+    reqDue.value = _svcForm.due || '';
+    reqRemark.value = _svcForm.remark || '';
+    [['name', reqName], ['contact', reqContact], ['due', reqDue], ['remark', reqRemark]].forEach(function(pair){
+      var key = pair[0], node = pair[1];
+      var sync = function(){
+        _svcForm[key] = node.value;
+        // 已生成过需求单 → 表单变更后同步刷新，避免发出旧内容
+        if (reqOutText.value) _svcReqBuild(false);
+      };
+      node.addEventListener('input', sync);
+      node.addEventListener('change', sync);
+    });
 
     function _svcReqHint(msg, kind){
       reqHint.textContent = msg || '';
       reqHint.className = 'svc-req-hint' + (kind ? ' svc-req-hint-' + kind : '');
     }
+    function _svcReqInfo(){
+      return {
+        name: (reqName.value || '').trim(),
+        contact: (reqContact.value || '').trim(),
+        due: (reqDue.value || '').trim(),
+        remark: (reqRemark.value || '').trim()
+      };
+    }
+    // 生成需求单：需求内容代入上方所选服务，预算报价带入上方加总价格
+    function _svcReqBuild(newSeq){
+      updateSvcTotal();                           // 同步「预算报价」栏与费用汇总条
+      if(newSeq || !_svcReqSeq) _svcReqSeq = _svcOrderNo();
+      reqDesc.value = _svcReqContentDigest();     // 需求内容始终跟随上方勾选
+      reqOutText.value = buildServiceReqText(_svcReqSeq, _todayCN(), _svcReqInfo());
+      reqOut.style.display = 'block';
+      return reqOutText.value;
+    }
     // 复制 / 发信前若尚未生成，自动补生成，避免多一步操作
     function _svcReqEnsure(){
       if(reqOutText.value) return reqOutText.value;
       if(state.selectedServices.size === 0){ _svcReqHint('⚠️ 请先勾选至少一项服务', 'err'); return ''; }
-      _svcReqSeq = _svcOrderNo();
-      reqOutText.value = buildServiceReqText(_svcReqSeq, _todayCN());
-      reqOut.style.display = 'block';
-      return reqOutText.value;
+      return _svcReqBuild(false);
     }
     reqGen.addEventListener('click', function(){
       if(state.selectedServices.size === 0){ _svcReqHint('⚠️ 请先勾选至少一项服务', 'err'); return; }
-      _svcReqSeq = _svcOrderNo();
-      reqOutText.value = buildServiceReqText(_svcReqSeq, _todayCN());
-      reqOut.style.display = 'block';
-      _svcReqHint('✔ 需求单已生成，可复制或发送邮件', 'ok');
+      _svcReqBuild(true);
+      _svcReqHint('✔ 需求单已生成，可复制、导出 PDF 或发送邮件', 'ok');
     });
     reqCopy.addEventListener('click', function(){
       var btn = this;
@@ -1667,7 +1749,25 @@
     reqMail.addEventListener('click', function(){
       if (this.disabled) return;
       if(!_svcReqEnsure()) return;
-      _deliverReqMail('【HR 服务需求单】' + _svcReqSeq, reqOutText.value, { btn: this, hint: _svcReqHint });
+      // ★ v7.0.5 标题不带【】，抬头由 _deliverReqMail 统一加「中国区人资服务接单中心」
+      _deliverReqMail('HR 服务需求单 ' + _svcReqSeq, reqOutText.value, { btn: this, hint: _svcReqHint });
+    });
+    // 导出 PDF：走打印窗口（与专案需求单同一方案，中文由浏览器渲染，不会乱码）
+    reqExport.addEventListener('click', function(){
+      if(state.selectedServices.size === 0){ _svcReqHint('⚠️ 请先勾选至少一项服务', 'err'); return; }
+      var html = buildServiceReqPrintHTML(_svcReqSeq || _svcOrderNo(), _todayCN(), _svcReqInfo());
+      var pw = window.open('', '_blank');
+      if(!pw){ _svcReqHint('⚠️ 浏览器拦截了打印窗口，请允许弹窗后重试', 'err'); return; }
+      pw.document.write(html);
+      pw.document.close();
+      _svcReqHint('✔ 已打开打印窗口，请选择「另存为 PDF」', 'ok');
+    });
+    reqReset.addEventListener('click', function(){
+      _svcForm = state.svcReqForm = { name: '', contact: '', due: '', remark: '' };
+      reqName.value = ''; reqContact.value = ''; reqDue.value = ''; reqRemark.value = '';
+      reqDesc.value = _svcReqContentDigest();
+      reqOutText.value = ''; reqOut.style.display = 'none';
+      _svcReqHint('已清空');
     });
 
     // 重建后同步费用汇总显示（保持已选服务金额不丢失）
@@ -1846,17 +1946,32 @@
   }
 
   // ★ 服务选择自动计费（支持数量）
-  function updateSvcTotal() {
-    var totalRight = document.querySelector('.svc-total-right'); if (!totalRight) return;
-    var selectedTotal = 0;
+  // ★ v7.0.5 已选服务加总（费用汇总条 + 服务需求单「预算报价」共用同一口径）
+  function _svcSelectedTotal() {
+    var t = 0;
     state.selectedServices.forEach(function(idx){
       var s = QUOTE_SERVICES[idx];
       if (s && s.price != null) {
         var qty = state.serviceQuantities[idx] || 1;
-        selectedTotal += (Number(s.price) || 0) * qty;
+        t += (Number(s.price) || 0) * qty;
       }
     });
+    return t;
+  }
+  // ★ v7.0.5 预算报价文案（跟随「费用类型」下拉：服务报价总计 / 月度预估 / 自定义金额）
+  function _svcQuoteText() {
     var feeType = state.feeType || 'total';
+    if (feeType === 'custom') return '¥' + (state.customFee || '0');
+    if (feeType === 'monthly') return '¥' + fmt(_svcSelectedTotal() / 12, 0);
+    return '¥' + fmt(_svcSelectedTotal(), 0);
+  }
+  function updateSvcTotal() {
+    var selectedTotal = _svcSelectedTotal();
+    var feeType = state.feeType || 'total';
+    // ★ v7.0.5 同步服务需求单表单的「预算报价」（只读，自动带入上方加总价格）
+    var _quoteBox = document.getElementById('svcReqQuote');
+    if (_quoteBox) _quoteBox.value = _svcQuoteText();
+    var totalRight = document.querySelector('.svc-total-right'); if (!totalRight) return;
     var displayVal = '', displaySub = '';
     if (feeType === 'custom') { displayVal = '¥' + (state.customFee || '0'); displaySub = '自定义金额'; }
     else if (feeType === 'monthly') { displayVal = '¥' + fmt(selectedTotal / 12, 0); displaySub = '月均（' + state.selectedServices.size + '项服务 ÷ 12月）'; }
@@ -1899,6 +2014,8 @@
   }
   // ★ v7.0.3 需求单统一收件邮箱
   var REQ_MAIL_TO = 'yuki.ye@cn.wpgholdings.com';
+  // ★ v7.0.5 需求单邮件抬头 —— 邮件「主题」与「正文首行」均以此开头
+  var REQ_MAIL_HEADER = '中国区人资服务接单中心';
   // ★ v7.0.4 「点击直接发送」：不再依赖本机邮件客户端多按一次发送。
   //   纯前端站点没有后端，无法自行投递 SMTP，因此改走「邮件中继」HTTP 接口（FormSubmit，免注册）。
   //   · 首次使用：中继会往收件箱发一封激活邮件，点一次激活链接后长期有效；
@@ -1925,7 +2042,7 @@
     }
     return url;
   }
-  // ★ v7.0.4 走中继接口直接投递邮件（返回 Promise<{ok,status,text}>）
+  // ★ v7.0.4 走中继接口直接投递邮件（返回 Promise<{ok,status,text,message,needActivation}>）
   function _mailRelaySend(subject, body){
     if (typeof fetch !== 'function') return Promise.reject(new Error('当前浏览器不支持 fetch'));
     return fetch(MAIL_RELAY, {
@@ -1935,6 +2052,7 @@
         _subject: subject || ('【HR 需求单】' + REQ_MAIL_TO),
         _template: 'box',
         _captcha: 'false',
+        '抬头': REQ_MAIL_HEADER,
         '收件人': REQ_MAIL_TO,
         '主题': subject || '',
         '需求单内容': body || ''
@@ -1943,16 +2061,36 @@
       return r.text().then(function(t){
         var j = null; try { j = JSON.parse(t); } catch (e) { }
         var ok = !!r.ok && !!j && (j.success === 'true' || j.success === true);
-        return { ok: ok, status: r.status, json: j, text: t };
+        var msg = (j && j.message) ? String(j.message) : String(t || '');
+        msg = msg.replace(/\s+/g, ' ').trim();
+        // ★ v7.0.5 中继「首次使用需激活」会以 success:false 返回：识别为待激活状态，
+        //   而不是当作「通道不可用」，避免界面弹出原始 JSON 报错。
+        var needAct = !ok && /activat/i.test(msg);
+        return { ok: ok, status: r.status, json: j, text: t, message: msg, needActivation: needAct };
       });
     });
   }
+  // ★ v7.0.5 把中继返回的原始报文翻译成一句人话（不把 JSON 原样抛到界面）
+  function _relayReason(res){
+    if (!res) return '未知原因';
+    if (res.status === 429) return '发送过于频繁，请稍后再试';
+    var msg = String(res.message || '').replace(/\s+/g, ' ').trim();
+    if (/activat/i.test(msg)) return '中继待激活';
+    // 以 file:// 直接打开本地 html 时，中继会拒绝（无来源站点）
+    if (/web server|HTML files/i.test(msg)) return '当前以本地文件方式打开，请改用线上网址访问后再发送';
+    if (/origin|referer|domain|not allowed/i.test(msg)) return '中继不认可当前站点来源';
+    if (msg) return 'HTTP ' + res.status + '：' + msg.slice(0, 60);
+    return 'HTTP ' + res.status;
+  }
   // ★ v7.0.4 统一投递入口：优先「直接发送」，失败自动降级 mailto，功能不会失效
+  //   ★ v7.0.5 主题统一加邮件抬头「中国区人资服务接单中心」
   //   ui: { btn: 按钮元素, hint: 提示函数(msg, kind) }
   function _deliverReqMail(subject, body, ui){
     var btn = ui && ui.btn;
     var hint = ui && ui.hint;
     var original = btn ? btn.textContent : '';
+    // 抬头 + 原标题（原标题已带【】，此处直接并列，避免出现【】【】）
+    var mailSubject = '【' + REQ_MAIL_HEADER + '】' + String(subject || 'HR 需求单');
     function _busy(t){ if (btn){ btn.disabled = true; btn.textContent = t; } }
     function _done(t){
       if (!btn) return;
@@ -1961,18 +2099,26 @@
     }
     if (hint) hint('⏳ 正在直接发送到 ' + REQ_MAIL_TO + ' …', '');
     _busy('⏳ 发送中…');
-    return _mailRelaySend(subject, body).then(function(res){
+    return _mailRelaySend(mailSubject, body).then(function(res){
       if (res.ok){
         _done('✔ 已发送');
-        if (hint) hint('✔ 邮件已直接发送到 ' + REQ_MAIL_TO + '（首次使用请先在邮箱点一次激活链接）', 'ok');
+        if (hint) hint('✔ 邮件已直接发送到 ' + REQ_MAIL_TO + '（抬头：' + REQ_MAIL_HEADER + '）', 'ok');
         return true;
       }
-      throw new Error('HTTP ' + res.status + (res.text ? '：' + String(res.text).replace(/\s+/g, ' ').slice(0, 100) : ''));
+      if (res.needActivation){
+        // 中继首次使用需收件人点一次激活链接；本次同时唤起本机客户端兜底，不丢件
+        _openMailClient(mailSubject, body);
+        _done('✉️ 发送邮件');
+        if (hint) hint('📮 直发通道待激活：中继已向 ' + REQ_MAIL_TO + ' 发出激活邮件，请到该邮箱点一次激活链接'
+          + '（建议把 submissions@formsubmit.co 加入安全发件人）。激活后即可一键直发；本次已同时唤起本机邮件客户端兜底。', 'warn');
+        return false;
+      }
+      throw new Error(_relayReason(res));
     }).catch(function(err){
       // 降级：唤起本机邮件客户端（mailto），用户只需再点一次发送
-      _openMailClient(subject, body);
+      _openMailClient(mailSubject, body);
       _done('✉️ 发送邮件');
-      if (hint) hint('⚠️ 直发通道不可用（' + (err && err.message ? err.message : err) + '），已唤起本机邮件客户端，点一次发送即可。', 'err');
+      if (hint) hint('⚠️ 直发通道暂时不可用（' + (err && err.message ? err.message : err) + '），已唤起本机邮件客户端，点一次发送即可。', 'err');
       return false;
     });
   }
@@ -1997,8 +2143,12 @@
     }catch(e){ fallback(); }
   }
   // ★ v7.0.3 服务需求单纯文本（依据计费区已勾选服务生成）
-  function buildServiceReqText(orderNo, dateStr){
+  // ★ v7.0.5 与专案需求单同构：正文首行加邮件抬头 + 增「委托与联系信息」；
+  //   需求内容自动代入上方已选服务，预算报价自动带入加总价格。
+  function buildServiceReqText(orderNo, dateStr, info){
+    info = info || {};
     var lines = [];
+    lines.push(REQ_MAIL_HEADER);                  // ← 邮件抬头
     lines.push('【HR 服务需求单】' + orderNo);
     lines.push('日期：' + dateStr);
     lines.push('');
@@ -2026,7 +2176,7 @@
     });
     if(n === 0) lines.push('（尚未勾选任何服务）');
     lines.push('');
-    lines.push('二、费用预估');
+    lines.push('二、预算报价');
     var feeType = state.feeType || 'total';
     if(feeType === 'custom'){
       lines.push('费用类型：自定义金额');
@@ -2039,9 +2189,35 @@
       lines.push('金额：¥' + fmt(total, 0) + '（已选 ' + n + ' 项服务）');
     }
     lines.push('');
+    // ★ v7.0.5 第三段：委托与联系信息（与专案需求单同构）
+    lines.push('三、委托与联系信息');
+    lines.push('联系人：' + (info.name || '待确认'));
+    lines.push('联系方式：' + (info.contact || '待确认'));
+    lines.push('期望交付时间：' + (info.due ? _cnDate(info.due) : '待确认'));
+    lines.push('备注：' + (info.remark || '无'));
+    lines.push('');
     lines.push('受理单位：中国人资服务处');
     lines.push('说明：本单为服务需求登记，正式报价由人资部专家评估后单独提供。');
     return lines.join('\n');
+  }
+  // ★ v7.0.5 服务需求单「需求内容」自动摘要（代入上方已选服务，作为需求内容栏与打印版正文）
+  function _svcReqContentDigest(){
+    var out = [];
+    var idxList = [];
+    state.selectedServices.forEach(function(v){ idxList.push(v); });
+    idxList.sort(function(a, b){ return a - b; });
+    var n = 0;
+    idxList.forEach(function(idx){
+      var s = QUOTE_SERVICES[idx];
+      if(!s) return;
+      n++;
+      var qty = state.serviceQuantities[idx] || 1;
+      var specTxt = String(s.spec || '').trim();
+      out.push(n + '. ' + (s.item || s.content) + '　× ' + qty +
+        (specTxt ? '（' + specTxt + '）' : ''));
+    });
+    if(n === 0) out.push('（尚未勾选任何服务）');
+    return out.join('\n');
   }
   function _escHtml(s){
     return String(s == null ? '' : s)
@@ -2095,6 +2271,90 @@
       '<table>' + trs + '</table>' +
       '<div class="foot">受理单位：中国人资服务处<br>' +
         '说明：本单为专案需求登记，正式报价由人资部专家评估后单独提供。</div>' +
+      '</body></html>';
+  }
+  // ★ v7.0.5 生成可打印的服务需求单 HTML
+  //   需求内容 = 上方已勾选服务（自动代入）；预算报价 = 上方加总价格（自动带入）
+  function buildServiceReqPrintHTML(orderNo, dateStr, info){
+    info = info || {};
+    var idxList = [];
+    state.selectedServices.forEach(function(v){ idxList.push(v); });
+    idxList.sort(function(a, b){ return a - b; });
+    var total = 0, n = 0;
+    var svcTrs = '';
+    idxList.forEach(function(idx){
+      var s = QUOTE_SERVICES[idx];
+      if(!s) return;
+      n++;
+      var qty = state.serviceQuantities[idx] || 1;
+      var sub = (Number(s.price) || 0) * qty;
+      total += sub;
+      var specTxt = String(s.spec || '').trim();
+      var priceTxt = (s.price == null || s.price === '') ? '按需定制'
+        : ('¥' + s.price + (specTxt ? '/' + specTxt : ''));
+      svcTrs += '<tr><td class="c">' + n + '</td><td>' + _escHtml(s.item || s.content) + '</td>' +
+        '<td class="c">' + qty + '</td><td class="c">' + _escHtml(priceTxt) + '</td>' +
+        '<td class="r">¥' + _escHtml(fmt(sub, 0)) + '</td></tr>';
+    });
+    if(!n) svcTrs = '<tr><td colspan="5" class="c">（尚未勾选任何服务）</td></tr>';
+    var feeType = state.feeType || 'total';
+    var quoteTxt;
+    if(feeType === 'custom') quoteTxt = '¥' + (state.customFee || '0') + '（自定义金额）';
+    else if(feeType === 'monthly') quoteTxt = '¥' + fmt(total / 12, 0) + '（月度预估 · ' + n + ' 项服务 ÷ 12 月）';
+    else quoteTxt = '¥' + fmt(total, 0) + '（服务报价总计 · 已选 ' + n + ' 项服务）';
+
+    var infoRows = [
+      ['联系人', _escHtml(info.name || '待确认')],
+      ['联系方式', _escHtml(info.contact || '待确认')],
+      ['期望交付时间', _escHtml(info.due ? _cnDate(info.due) : '待确认')],
+      ['预算报价', quoteTxt],
+      ['备注', _escHtml(info.remark || '无')]
+    ];
+    var infoTrs = infoRows.map(function(r){
+      return '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>';
+    }).join('');
+
+    return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">' +
+      '<title>' + _escHtml(orderNo) + ' 服务需求单</title><style>' +
+      '*{box-sizing:border-box;}' +
+      'body{font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",sans-serif;' +
+        'color:#1e293b;margin:0;padding:34px 42px;}' +
+      '.noprint{margin-bottom:18px;}' +
+      '.noprint button{padding:10px 24px;font-size:13px;border-radius:8px;border:none;' +
+        'background:#4f46e5;color:#fff;font-weight:700;cursor:pointer;}' +
+      '.band{height:6px;background:linear-gradient(90deg,#4f46e5,#a5b4fc);border-radius:3px;margin-bottom:20px;}' +
+      'h1{font-size:25px;margin:0 0 6px;color:#0f172a;letter-spacing:2px;}' +
+      '.sub{font-size:12.5px;color:#64748b;margin-bottom:18px;}' +
+      '.meta{font-size:12.5px;color:#475569;margin-bottom:24px;}' +
+      '.meta b{color:#0f172a;}' +
+      '.sec{font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 9px;padding-left:9px;border-left:4px solid #4f46e5;}' +
+      'table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;}' +
+      'th{width:150px;text-align:left;background:#f8fafc;color:#475569;font-weight:600;' +
+        'padding:10px 13px;border:1px solid #e2e8f0;vertical-align:top;}' +
+      'td{padding:10px 13px;border:1px solid #e2e8f0;white-space:pre-wrap;word-break:break-word;}' +
+      'thead th{width:auto;background:#eef2ff;color:#3730a3;}' +
+      'td.c{text-align:center;white-space:nowrap;}td.r{text-align:right;white-space:nowrap;font-weight:600;}' +
+      '.foot{font-size:11.5px;color:#64748b;line-height:1.85;border-top:1px dashed #cbd5e1;padding-top:14px;}' +
+      '@page{margin:12mm;}' +
+      '@media print{.noprint{display:none;} body{padding:0;}}' +
+      '</style></head><body>' +
+      '<div class="noprint"><button onclick="window.print()">🖨️ 打印 / 另存为 PDF</button></div>' +
+      '<div class="band"></div>' +
+      '<h1>服务需求单</h1>' +
+      '<div class="sub">中国人资服务处</div>' +
+      '<div class="meta">单号：<b>' + _escHtml(orderNo) + '</b> &nbsp;|&nbsp; 日期：<b>' + _escHtml(dateStr) + '</b>' +
+        ' &nbsp;|&nbsp; 呈送：<b>中国区人资服务接单中心</b></div>' +
+      '<div class="sec">一、服务需求清单</div>' +
+      '<table><thead><tr><th>#</th><th>服务项目</th><th>数量</th><th>单价</th><th>小计</th></tr></thead>' +
+        '<tbody>' + svcTrs + '</tbody></table>' +
+      '<div class="sec">二、预算报价</div>' +
+      '<table><tr><th>费用类型</th><td>' + (feeType === 'custom' ? '自定义金额'
+        : (feeType === 'monthly' ? '月度预估费用' : '服务报价总计')) + '</td></tr>' +
+        '<tr><th>加总报价</th><td><b>' + quoteTxt + '</b></td></tr></table>' +
+      '<div class="sec">三、委托与联系信息</div>' +
+      '<table>' + infoTrs + '</table>' +
+      '<div class="foot">受理单位：中国人资服务处<br>' +
+        '说明：本单为服务需求登记，正式报价由人资部专家评估后单独提供。</div>' +
       '</body></html>';
   }
 
