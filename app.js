@@ -1396,12 +1396,12 @@
             '<span class="spe-req-hint" id="speReqHint"></span>' +
           '</div>' +
           '<div class="spe-req-output" id="speReqOutput" style="display:none;">' +
-            '<div class="spe-req-output-head">📄 专案需求单（可复制或发送邮件给 SDC 专家）</div>' +
+            '<div class="spe-req-output-head">📄 专案需求单（可复制，或点右侧按钮直接发送）</div>' +
             '<textarea id="speReqOutputText" class="spe-req-output-text" rows="10" readonly></textarea>' +
             '<div class="spe-req-output-actions">' +
               '<button class="mini-btn spe-req-output-btn" type="button" id="speReqCopy">📋 一键复制</button>' +
               '<button class="mini-btn spe-req-output-btn" type="button" id="speReqMail">✉️ 发送邮件</button>' +
-              '<span class="spe-req-mailto">收件人：' + REQ_MAIL_TO + '</span>' +
+              '<span class="spe-req-mailto">收件人：' + REQ_MAIL_TO + '　·　点击即直接发送</span>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -1486,13 +1486,13 @@
           _speHint('⚠️ 复制失败，请手动全选复制', 'err');
         });
       });
-      // ★ v7.0.3 发送邮件：mailto 预填主题 + 需求单全文，收件人固定为 REQ_MAIL_TO
+      // ★ v7.0.4 发送邮件：点击后直接投递到 REQ_MAIL_TO（无需再在客户端点发送）
       projNotice.querySelector('#speReqMail').addEventListener('click', function(){
+        if (this.disabled) return;
         var txt = _rOutText.value;
         if(!txt){ _speHint('⚠️ 请先点击「生成需求单」', 'err'); return; }
         var expN = getExpertInfo(state.advisorPerson);
-        _openMailClient('【专案需求单】' + _speNo + (expN ? ' — ' + expN.name : ''), txt);
-        _speHint('✔ 已唤起邮件客户端，收件人 ' + REQ_MAIL_TO, 'ok');
+        _deliverReqMail('【专案需求单】' + _speNo + (expN ? ' — ' + expN.name : ''), txt, { btn: this, hint: _speHint });
       });
       // 清空
       projNotice.querySelector('#speReqReset').addEventListener('click', function(){
@@ -1629,9 +1629,9 @@
 
     var reqOut = el('div', 'svc-req-output'); reqOut.id = 'svcReqOutput'; reqOut.style.display = 'none';
     reqOut.innerHTML =
-      '<div class="svc-req-output-head">📄 服务需求单（可复制或发送邮件给 SDC 专家）</div>' +
+      '<div class="svc-req-output-head">📄 服务需求单（可复制，或点上方按钮直接发送）</div>' +
       '<textarea id="svcReqOutputText" class="svc-req-output-text" rows="9" readonly></textarea>' +
-      '<div class="spe-req-mailto">收件人：' + REQ_MAIL_TO + '</div>';
+      '<div class="spe-req-mailto">收件人：' + REQ_MAIL_TO + '　·　点击即直接发送</div>';
     calcBodyHost.appendChild(reqOut);
     var reqOutText = reqOut.querySelector('#svcReqOutputText');
 
@@ -1665,9 +1665,9 @@
       }, function(){ _svcReqHint('⚠️ 复制失败，请手动全选复制', 'err'); });
     });
     reqMail.addEventListener('click', function(){
+      if (this.disabled) return;
       if(!_svcReqEnsure()) return;
-      _openMailClient('【HR 服务需求单】' + _svcReqSeq, reqOutText.value);
-      _svcReqHint('✔ 已唤起邮件客户端，收件人 ' + REQ_MAIL_TO, 'ok');
+      _deliverReqMail('【HR 服务需求单】' + _svcReqSeq, reqOutText.value, { btn: this, hint: _svcReqHint });
     });
 
     // 重建后同步费用汇总显示（保持已选服务金额不丢失）
@@ -1868,10 +1868,10 @@
 
   // ========== v5.9：生成服务报价清单 PDF ==========
   // ★ v7.0.2 专案需求单相关工具
-  //   为什么「导出 PDF」走打印窗口而不是 jsPDF：
-  //   jsPDF 内置字体仅 Helvetica 等 14 种西文字体，无中文字形，直接 doc.text('中文') 会乱码/丢字。
-  //   项目内也没有可嵌入的中文 TTF（需数 MB 字体文件）。故改为生成可打印 HTML，
-  //   由浏览器渲染中文字形 → 用户在打印对话框选「另存为 PDF」，输出为矢量文字、清晰且无乱码。
+  //   关于中文 PDF：
+  //   · 专案需求单 → 生成可打印 HTML，交给浏览器渲染中文后「另存为 PDF」（轻量、无字体依赖）。
+  //   · 服务报价清单 → 走 jsPDF + 内嵌中文子集字体（v7.0.4），可直接下载真正的 PDF 文件。
+  //   两者都不会出现中文乱码。
   function _cnDate(v){
     if(!v) return '待确认';
     var p = String(v).split('-');
@@ -1898,9 +1898,14 @@
       String(Math.floor(Math.random() * 9000) + 1000);
   }
   // ★ v7.0.3 需求单统一收件邮箱
-  //   纯前端站点无后端，故走 mailto: 唤起本机邮件客户端，
-  //   主题/正文自动预填，用户确认后即可发出（不依赖服务器）。
   var REQ_MAIL_TO = 'yuki.ye@cn.wpgholdings.com';
+  // ★ v7.0.4 「点击直接发送」：不再依赖本机邮件客户端多按一次发送。
+  //   纯前端站点没有后端，无法自行投递 SMTP，因此改走「邮件中继」HTTP 接口（FormSubmit，免注册）。
+  //   · 首次使用：中继会往收件箱发一封激活邮件，点一次激活链接后长期有效；
+  //     之后每次点击 = 直接发送。
+  //   · 如公司提供内部接口 / SMTP 网关，只需把 MAIL_RELAY 换成该地址，其余逻辑不变。
+  //   · 中继不可用时自动降级为唤起本机邮件客户端（mailto），保证功能不失效。
+  var MAIL_RELAY = 'https://formsubmit.co/ajax/' + REQ_MAIL_TO;
   function _mailtoUrl(subject, body){
     return 'mailto:' + REQ_MAIL_TO +
       '?subject=' + encodeURIComponent(subject || '') +
@@ -1919,6 +1924,57 @@
       try{ window.location.href = url; }catch(e2){ /* 被浏览器拦截时静默降级 */ }
     }
     return url;
+  }
+  // ★ v7.0.4 走中继接口直接投递邮件（返回 Promise<{ok,status,text}>）
+  function _mailRelaySend(subject, body){
+    if (typeof fetch !== 'function') return Promise.reject(new Error('当前浏览器不支持 fetch'));
+    return fetch(MAIL_RELAY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        _subject: subject || ('【HR 需求单】' + REQ_MAIL_TO),
+        _template: 'box',
+        _captcha: 'false',
+        '收件人': REQ_MAIL_TO,
+        '主题': subject || '',
+        '需求单内容': body || ''
+      })
+    }).then(function(r){
+      return r.text().then(function(t){
+        var j = null; try { j = JSON.parse(t); } catch (e) { }
+        var ok = !!r.ok && !!j && (j.success === 'true' || j.success === true);
+        return { ok: ok, status: r.status, json: j, text: t };
+      });
+    });
+  }
+  // ★ v7.0.4 统一投递入口：优先「直接发送」，失败自动降级 mailto，功能不会失效
+  //   ui: { btn: 按钮元素, hint: 提示函数(msg, kind) }
+  function _deliverReqMail(subject, body, ui){
+    var btn = ui && ui.btn;
+    var hint = ui && ui.hint;
+    var original = btn ? btn.textContent : '';
+    function _busy(t){ if (btn){ btn.disabled = true; btn.textContent = t; } }
+    function _done(t){
+      if (!btn) return;
+      btn.disabled = false; btn.textContent = t;
+      setTimeout(function(){ if (btn) btn.textContent = original; }, 2200);
+    }
+    if (hint) hint('⏳ 正在直接发送到 ' + REQ_MAIL_TO + ' …', '');
+    _busy('⏳ 发送中…');
+    return _mailRelaySend(subject, body).then(function(res){
+      if (res.ok){
+        _done('✔ 已发送');
+        if (hint) hint('✔ 邮件已直接发送到 ' + REQ_MAIL_TO + '（首次使用请先在邮箱点一次激活链接）', 'ok');
+        return true;
+      }
+      throw new Error('HTTP ' + res.status + (res.text ? '：' + String(res.text).replace(/\s+/g, ' ').slice(0, 100) : ''));
+    }).catch(function(err){
+      // 降级：唤起本机邮件客户端（mailto），用户只需再点一次发送
+      _openMailClient(subject, body);
+      _done('✉️ 发送邮件');
+      if (hint) hint('⚠️ 直发通道不可用（' + (err && err.message ? err.message : err) + '），已唤起本机邮件客户端，点一次发送即可。', 'err');
+      return false;
+    });
   }
   // ★ v7.0.3 通用剪贴板复制：优先 Clipboard API，降级 execCommand
   function _copyFromTextarea(ta, onOk, onFail){
@@ -2031,7 +2087,7 @@
       '<div class="noprint"><button onclick="window.print()">🖨️ 打印 / 另存为 PDF</button></div>' +
       '<div class="band"></div>' +
       '<h1>专案需求单</h1>' +
-      '<div class="sub">大联大控股 · HR 共享服务中心（SDC）</div>' +
+      '<div class="sub">中国人资服务处</div>' +
       '<div class="meta">单号：<b>' + _escHtml(orderNo) + '</b> &nbsp;|&nbsp; 日期：<b>' + _escHtml(dateStr) + '</b></div>' +
       '<div class="sec">一、专案需求说明</div>' +
       '<div class="desc">' + _escHtml(d.desc) + '</div>' +
@@ -2042,12 +2098,164 @@
       '</body></html>';
   }
 
+  // ═══════════ ★ v7.0.4 中文 PDF 字形支持 ═══════════
+  // 乱码根因：jsPDF 内置字体只有 Helvetica 等 14 种西文字体，没有中文字形，
+  //   doc.text('中文') 会画成乱码/空白。
+  // 解决方案：随站点附带「按需子集化」的开源思源黑体（Noto Sans SC 子集，OFL 许可），
+  //   仅在点击生成 PDF 时按需拉取（约 480KB/字重，同源、可被浏览器缓存），
+  //   再用 addFileToVFS + addFont 以 Identity-H 方式嵌入 → 输出真正的矢量中文 PDF。
+  var PDF_CJK_FONT = {
+    regular: 'assets/pdf-cjk-regular.ttf',
+    bold: 'assets/pdf-cjk-bold.ttf',
+    name: 'PDFCJK'
+  };
+  var _pdfFontB64 = null;            // 已加载的字体（base64）缓存
+  var _pdfFontRegistered = false;    // jsPDF 字库是全局的，只注册一次
+
+  function _bufToBase64(buf){
+    var bytes = new Uint8Array(buf), bin = '', CHUNK = 0x8000;
+    for (var i = 0; i < bytes.length; i += CHUNK){
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK, bytes.length)));
+    }
+    return btoa(bin);
+  }
+  function _fetchFontB64(url){
+    return fetch(url).then(function(r){
+      if (!r.ok) throw new Error('字体请求失败 HTTP ' + r.status);
+      return r.arrayBuffer();
+    }).then(_bufToBase64);
+  }
+  function _loadPdfCjkFont(){
+    if (_pdfFontB64) return Promise.resolve(_pdfFontB64);
+    if (typeof fetch !== 'function') return Promise.reject(new Error('当前浏览器不支持 fetch'));
+    return Promise.all([
+      _fetchFontB64(PDF_CJK_FONT.regular),
+      _fetchFontB64(PDF_CJK_FONT.bold)
+    ]).then(function(res){
+      _pdfFontB64 = { regular: res[0], bold: res[1] };
+      return _pdfFontB64;
+    });
+  }
+  // 注册中文字库到 jsPDF，并把文档当前字体切到中文
+  // 注意：按「实例」判断是否已注册（jsPDF 字库挂在 API 上，跨实例共享），
+  //   用 getFontList() 探测比全局布尔标记更稳，避免误判导致字体没注册就使用。
+  function _applyPdfCjkFont(doc){
+    if (!_pdfFontB64) return false;
+    var need = false;
+    try {
+      var list = (typeof doc.getFontList === 'function') ? doc.getFontList() : null;
+      need = !(list && list[PDF_CJK_FONT.name]);
+    } catch (e) {
+      need = !_pdfFontRegistered;
+    }
+    if (need){
+      doc.addFileToVFS('pdf-cjk-regular.ttf', _pdfFontB64.regular);
+      doc.addFont('pdf-cjk-regular.ttf', PDF_CJK_FONT.name, 'normal');
+      doc.addFileToVFS('pdf-cjk-bold.ttf', _pdfFontB64.bold);
+      doc.addFont('pdf-cjk-bold.ttf', PDF_CJK_FONT.name, 'bold');
+      _pdfFontRegistered = true;
+    }
+    doc.setFont(PDF_CJK_FONT.name, 'normal');
+    return true;
+  }
+  // 十六进制色值 → RGB 三元组
+  // 注意：getPricingType().color 是 '#ee6666' 这样的**字符串**，
+  //   旧代码直接取 color[0]/color[1]/color[2] 会得到 '#','e','e'，
+  //   使 PDF 内容流里写出非法颜色操作符，导致部分阅读器解析失败。
+  function _hexToRgb(hex){
+    var h = String(hex == null ? '' : hex).replace('#', '').trim();
+    if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+    if (h.length !== 6 || /[^0-9a-fA-F]/.test(h)) return [100, 116, 139];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  // 兜底：字体拉取失败时改用浏览器打印（中文由浏览器渲染，绝不乱码）
+  function _serviceQuotePrintFallback(){
+    var today = new Date();
+    var orderNo = 'WPG-HR-' + today.getFullYear() +
+      String(today.getMonth() + 1).padStart(2, '0') +
+      String(today.getDate()).padStart(2, '0') + '-' +
+      String(Math.floor(Math.random() * 9000) + 1000);
+    var rows = '', total = 0;
+    var idxList = []; state.selectedServices.forEach(function(v){ idxList.push(v); });
+    idxList.sort(function(a, b){ return a - b; });
+    idxList.forEach(function(idx, i){
+      var s = QUOTE_SERVICES[idx]; if(!s) return;
+      var qty = state.serviceQuantities[idx] || 1;
+      var sub = (Number(s.price) || 0) * qty; total += sub;
+      var spec = String(s.spec || '').trim();
+      var modName = String(s.module || '').replace(/服务模块$/, '');
+      rows += '<tr><td>' + (i + 1) + '</td><td>' + _escHtml(s.item || s.content) + '</td>' +
+        '<td>' + _escHtml(modName) + '</td><td>' + getPricingType(s).label + '</td>' +
+        '<td class="r">' + (s.price == null || s.price === '' ? '按需定制' : ('¥' + s.price + (spec ? '/' + _escHtml(spec) : ''))) + '</td>' +
+        '<td class="c">' + qty + '</td><td class="r strong">¥' + fmt(sub, 0) + '</td></tr>';
+    });
+    var feeType = state.feeType || 'total';
+    var feeLabel = ({ total: '服务报价总计', monthly: '月度预估费用', custom: '自定义金额' })[feeType] || '';
+    var feeVal = feeType === 'custom' ? ('¥' + (state.customFee || '0'))
+      : (feeType === 'monthly' ? ('¥' + fmt(total / 12, 0)) : ('¥' + fmt(total, 0)));
+    var html = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">' +
+      '<title>' + _escHtml(orderNo) + ' HR 服务报价清单</title><style>' +
+      'body{font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;color:#1e293b;margin:0;padding:30px 36px;}' +
+      '.noprint{margin-bottom:16px;}.noprint button{padding:10px 24px;font-size:13px;border-radius:8px;border:none;background:#4f46e5;color:#fff;font-weight:700;cursor:pointer;}' +
+      '.band{height:6px;background:linear-gradient(90deg,#4f46e5,#818cf8);border-radius:3px;margin-bottom:18px;}' +
+      'h1{font-size:24px;margin:0 0 6px;color:#0f172a;letter-spacing:2px;}.sub{font-size:12.5px;color:#64748b;margin-bottom:8px;}' +
+      '.meta{font-size:12px;color:#64748b;margin-bottom:20px;}' +
+      'table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;}' +
+      'th{background:#f1f5f9;color:#475569;font-weight:600;padding:8px 9px;border:1px solid #e2e8f0;text-align:left;white-space:nowrap;}' +
+      'td{padding:7px 9px;border:1px solid #e2e8f0;}.r{text-align:right;}.c{text-align:center;}.strong{color:#dc2626;font-weight:700;}' +
+      '.sum{margin-top:14px;padding:14px 18px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;}' +
+      '.sum .v{font-size:20px;font-weight:800;color:#dc2626;}' +
+      '.foot{margin-top:20px;font-size:11px;color:#64748b;line-height:1.9;border-top:1px dashed #cbd5e1;padding-top:12px;}' +
+      '@page{margin:12mm;}@media print{.noprint{display:none;}body{padding:0;}}' +
+      '</style></head><body>' +
+      '<div class="noprint"><button onclick="window.print()">🖨️ 打印 / 另存为 PDF</button></div>' +
+      '<div class="band"></div><h1>HR 服务报价清单</h1>' +
+      '<div class="sub">中国人资服务处</div>' +
+      '<div class="meta">单号：' + _escHtml(orderNo) + ' &nbsp;|&nbsp; 日期：' + _escHtml(_todayCN()) +
+        (state.advisorPerson ? (' &nbsp;|&nbsp; 专属顾问：' + _escHtml(state.advisorPerson)) : '') + '</div>' +
+      '<table><thead><tr><th>#</th><th>服务名称</th><th>所属模块</th><th>计费模式</th><th style="text-align:right">单价</th><th style="text-align:center">数量</th><th style="text-align:right">小计</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>' +
+      '<div class="sum"><span>费用类型：' + feeLabel + '（已选 ' + state.selectedServices.size + ' 项服务）</span><span class="v">' + feeVal + '</span></div>' +
+      '<div class="foot">受理单位：中国人资服务处<br>' +
+        '说明：以上报价为标准参考价格，实际费用根据企业规模、服务频次及定制需求可能有所调整。<br>' +
+        '本清单由 HR 仪表板系统自动生成，有效期 30 天。</div>' +
+      '</body></html>';
+    var pw = window.open('', '_blank');
+    if (!pw){ alert('浏览器拦截了打印窗口，请允许弹窗后重试'); return; }
+    pw.document.write(html);
+    pw.document.close();
+  }
+
   function generateServiceQuotePDF() {
     if (!window.jspdf || !window.jspdf.jsPDF) { alert('PDF 库未加载，请刷新页面重试'); return; }
     if (state.selectedServices.size === 0) { alert('请先勾选至少一项服务再生成清单'); return; }
 
+    var btn = document.querySelector('.svc-pdf-btn');
+    var btnTxt = btn ? btn.innerHTML : '';
+    function _restore(){ if (btn){ btn.disabled = false; btn.innerHTML = btnTxt; } }
+    if (btn){ btn.disabled = true; btn.innerHTML = '⏳ 正在生成 PDF…'; }
+
+    _loadPdfCjkFont().then(function(){
+      try {
+        var built = _buildServiceQuotePdf();
+        built.doc.save(built.filename);
+      } catch (e) {
+        alert('PDF 生成失败：' + (e && e.message ? e.message : e));
+      }
+      _restore();
+    }, function(err){
+      _restore();
+      alert('中文字体加载失败：' + (err && err.message ? err.message : err) +
+        '\n\n已自动改用「打印 / 另存为 PDF」方式导出（中文同样不会乱码）。');
+      try { _serviceQuotePrintFallback(); } catch (e) { /* 兜底失败时静默 */ }
+    });
+  }
+
+  function _buildServiceQuotePdf() {
     var JSPDF = window.jspdf.jsPDF;
-    var doc = new JSPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    // putOnlyUsedFonts：只嵌入实际用到的字形，避免 PDF 体积过大
+    var doc = new JSPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', putOnlyUsedFonts: true });
+    _applyPdfCjkFont(doc);
     var pageW = doc.internal.pageSize.getWidth();
     var pageH = doc.internal.pageSize.getHeight();
     var margin = 15;
@@ -2072,7 +2280,7 @@
 
     doc.setFontSize(11);
     doc.setFont(undefined, 'normal');
-    doc.text('大联大控股 · HR 共享服务中心（SDC）', pageW / 2, 27, { align: 'center' });
+    doc.text('中国人资服务处', pageW / 2, 27, { align: 'center' });
 
     var today = new Date();
     var dateStr = today.getFullYear() + '年' + (today.getMonth() + 1) + '月' + today.getDate() + '日';
@@ -2175,7 +2383,8 @@
 
       // 计费模式标签
       var pt = getPricingType(s);
-      doc.setTextColor(pt.color[0], pt.color[1], pt.color[2]); // hex to rgb approximation
+      var ptRgb = _hexToRgb(pt.color);
+      doc.setTextColor(ptRgb[0], ptRgb[1], ptRgb[2]);
       doc.setFontSize(7);
       doc.text(pt.label, colX[2] + 1, y + 4);
 
@@ -2256,10 +2465,10 @@
     doc.text('WPG Holdings Co., Ltd. · 大联大控股 · HR Shared Service Center', margin, footerY + 1);
     doc.text('本文件由 CN 区 HR 服务指标仪表板自动生成 · 第 ' + doc.internal.getNumberOfPages() + ' 页', pageW - margin, footerY + 1, { align: 'right' });
 
-    // ── 保存 ──
+    // ── 文件名（保存动作由 generateServiceQuotePDF 负责） ──
     var filename = 'WPG-HR服务报价单_' + (state.advisorPerson || '全部') + '_' +
       today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '.pdf';
-    doc.save(filename);
+    return { doc: doc, filename: filename };
   }
 
   // ========== 第5页：炫彩介绍页 ==========
