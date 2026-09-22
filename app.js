@@ -1396,9 +1396,13 @@
             '<span class="spe-req-hint" id="speReqHint"></span>' +
           '</div>' +
           '<div class="spe-req-output" id="speReqOutput" style="display:none;">' +
-            '<div class="spe-req-output-head">📄 专案需求单（可复制后发给 SDC 专家）</div>' +
+            '<div class="spe-req-output-head">📄 专案需求单（可复制或发送邮件给 SDC 专家）</div>' +
             '<textarea id="speReqOutputText" class="spe-req-output-text" rows="10" readonly></textarea>' +
-            '<button class="mini-btn" type="button" id="speReqCopy">📋 一键复制</button>' +
+            '<div class="spe-req-output-actions">' +
+              '<button class="mini-btn spe-req-output-btn" type="button" id="speReqCopy">📋 一键复制</button>' +
+              '<button class="mini-btn spe-req-output-btn" type="button" id="speReqMail">✉️ 发送邮件</button>' +
+              '<span class="spe-req-mailto">收件人：' + REQ_MAIL_TO + '</span>' +
+            '</div>' +
           '</div>' +
         '</div>' +
         '<button class="land-btn land-btn-primary spe-notice-btn" type="button">👥 联系 SDC 共享中心专家 →</button>';
@@ -1456,8 +1460,8 @@
           '期望交付时间：' + _cnDate(d.due),
           '预算范围 / 备注：' + (d.budget || '待确认'),
           '',
-          '受理单位：大联大控股 · HR 共享服务中心（SDC）',
-          '说明：本单为专案需求登记，正式报价由 SDC 共享中心专家（Yuki / Queenie）评估后单独提供。'
+          '受理单位：中国人资服务处',
+          '说明：本单为专案需求登记，正式报价由人资部专家评估后单独提供。'
         ].join('\n');
       }
       // 生成需求单
@@ -1474,28 +1478,21 @@
         var btn = this;
         var txt = _rOutText.value;
         if(!txt){ _speHint('⚠️ 请先点击「生成需求单」', 'err'); return; }
-        var onOk = function(){
+        _copyFromTextarea(_rOutText, function(){
           btn.textContent = '✔ 已复制';
           _speHint('✔ 已复制到剪贴板，可粘贴发送给 SDC 专家', 'ok');
           setTimeout(function(){ btn.textContent = '📋 一键复制'; }, 1600);
-        };
-        var fallback = function(){
-          try{
-            _rOutText.removeAttribute('readonly');
-            _rOutText.select();
-            document.execCommand('copy');
-            _rOutText.setAttribute('readonly', 'readonly');
-            onOk();
-          }catch(e){
-            _rOutText.setAttribute('readonly', 'readonly');
-            _speHint('⚠️ 复制失败，请手动全选复制', 'err');
-          }
-        };
-        try{
-          if(navigator.clipboard && navigator.clipboard.writeText){
-            navigator.clipboard.writeText(txt).then(onOk, fallback);
-          } else { fallback(); }
-        }catch(e){ fallback(); }
+        }, function(){
+          _speHint('⚠️ 复制失败，请手动全选复制', 'err');
+        });
+      });
+      // ★ v7.0.3 发送邮件：mailto 预填主题 + 需求单全文，收件人固定为 REQ_MAIL_TO
+      projNotice.querySelector('#speReqMail').addEventListener('click', function(){
+        var txt = _rOutText.value;
+        if(!txt){ _speHint('⚠️ 请先点击「生成需求单」', 'err'); return; }
+        var expN = getExpertInfo(state.advisorPerson);
+        _openMailClient('【专案需求单】' + _speNo + (expN ? ' — ' + expN.name : ''), txt);
+        _speHint('✔ 已唤起邮件客户端，收件人 ' + REQ_MAIL_TO, 'ok');
       });
       // 清空
       projNotice.querySelector('#speReqReset').addEventListener('click', function(){
@@ -1616,6 +1613,62 @@
     pdfBtn.innerHTML = '📄 生成服务清单 PDF';
     pdfBtn.addEventListener('click', generateServiceQuotePDF);
     calcBodyHost.appendChild(pdfBtn);
+
+    // ★ v7.0.3：生成需求单 / 一键复制 / 发送邮件（收件邮箱固定 REQ_MAIL_TO）
+    var _svcReqSeq = '';
+    var reqBar = el('div', 'svc-req-bar');
+    var reqGen = el('button', 'svc-req-mini svc-req-mini-primary'); reqGen.type = 'button'; reqGen.id = 'svcReqGen';
+    reqGen.textContent = '📝 生成需求单';
+    var reqCopy = el('button', 'svc-req-mini'); reqCopy.type = 'button'; reqCopy.id = 'svcReqCopy';
+    reqCopy.textContent = '📋 一键复制';
+    var reqMail = el('button', 'svc-req-mini'); reqMail.type = 'button'; reqMail.id = 'svcReqMail';
+    reqMail.textContent = '✉️ 发送邮件';
+    var reqHint = el('span', 'svc-req-hint'); reqHint.id = 'svcReqHint';
+    reqBar.appendChild(reqGen); reqBar.appendChild(reqCopy); reqBar.appendChild(reqMail); reqBar.appendChild(reqHint);
+    calcBodyHost.appendChild(reqBar);
+
+    var reqOut = el('div', 'svc-req-output'); reqOut.id = 'svcReqOutput'; reqOut.style.display = 'none';
+    reqOut.innerHTML =
+      '<div class="svc-req-output-head">📄 服务需求单（可复制或发送邮件给 SDC 专家）</div>' +
+      '<textarea id="svcReqOutputText" class="svc-req-output-text" rows="9" readonly></textarea>' +
+      '<div class="spe-req-mailto">收件人：' + REQ_MAIL_TO + '</div>';
+    calcBodyHost.appendChild(reqOut);
+    var reqOutText = reqOut.querySelector('#svcReqOutputText');
+
+    function _svcReqHint(msg, kind){
+      reqHint.textContent = msg || '';
+      reqHint.className = 'svc-req-hint' + (kind ? ' svc-req-hint-' + kind : '');
+    }
+    // 复制 / 发信前若尚未生成，自动补生成，避免多一步操作
+    function _svcReqEnsure(){
+      if(reqOutText.value) return reqOutText.value;
+      if(state.selectedServices.size === 0){ _svcReqHint('⚠️ 请先勾选至少一项服务', 'err'); return ''; }
+      _svcReqSeq = _svcOrderNo();
+      reqOutText.value = buildServiceReqText(_svcReqSeq, _todayCN());
+      reqOut.style.display = 'block';
+      return reqOutText.value;
+    }
+    reqGen.addEventListener('click', function(){
+      if(state.selectedServices.size === 0){ _svcReqHint('⚠️ 请先勾选至少一项服务', 'err'); return; }
+      _svcReqSeq = _svcOrderNo();
+      reqOutText.value = buildServiceReqText(_svcReqSeq, _todayCN());
+      reqOut.style.display = 'block';
+      _svcReqHint('✔ 需求单已生成，可复制或发送邮件', 'ok');
+    });
+    reqCopy.addEventListener('click', function(){
+      var btn = this;
+      if(!_svcReqEnsure()) return;
+      _copyFromTextarea(reqOutText, function(){
+        btn.textContent = '✔ 已复制';
+        _svcReqHint('✔ 已复制到剪贴板', 'ok');
+        setTimeout(function(){ btn.textContent = '📋 一键复制'; }, 1600);
+      }, function(){ _svcReqHint('⚠️ 复制失败，请手动全选复制', 'err'); });
+    });
+    reqMail.addEventListener('click', function(){
+      if(!_svcReqEnsure()) return;
+      _openMailClient('【HR 服务需求单】' + _svcReqSeq, reqOutText.value);
+      _svcReqHint('✔ 已唤起邮件客户端，收件人 ' + REQ_MAIL_TO, 'ok');
+    });
 
     // 重建后同步费用汇总显示（保持已选服务金额不丢失）
     updateSvcTotal();
@@ -1836,6 +1889,104 @@
       String(t.getDate()).padStart(2, '0') + '-' +
       String(Math.floor(Math.random() * 9000) + 1000);
   }
+  // ★ v7.0.3 服务需求单号（与专案需求单区分前缀）
+  function _svcOrderNo(){
+    var t = new Date();
+    return 'WPG-HR-SVC-' + t.getFullYear() +
+      String(t.getMonth() + 1).padStart(2, '0') +
+      String(t.getDate()).padStart(2, '0') + '-' +
+      String(Math.floor(Math.random() * 9000) + 1000);
+  }
+  // ★ v7.0.3 需求单统一收件邮箱
+  //   纯前端站点无后端，故走 mailto: 唤起本机邮件客户端，
+  //   主题/正文自动预填，用户确认后即可发出（不依赖服务器）。
+  var REQ_MAIL_TO = 'yuki.ye@cn.wpgholdings.com';
+  function _mailtoUrl(subject, body){
+    return 'mailto:' + REQ_MAIL_TO +
+      '?subject=' + encodeURIComponent(subject || '') +
+      '&body=' + encodeURIComponent(body || '');
+  }
+  function _openMailClient(subject, body){
+    var url = _mailtoUrl(subject, body);
+    try{
+      var a = document.createElement('a');
+      a.href = url;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }catch(e){
+      try{ window.location.href = url; }catch(e2){ /* 被浏览器拦截时静默降级 */ }
+    }
+    return url;
+  }
+  // ★ v7.0.3 通用剪贴板复制：优先 Clipboard API，降级 execCommand
+  function _copyFromTextarea(ta, onOk, onFail){
+    var fallback = function(){
+      try{
+        ta.removeAttribute('readonly');
+        ta.select();
+        document.execCommand('copy');
+        ta.setAttribute('readonly', 'readonly');
+        if(onOk) onOk();
+      }catch(e){
+        ta.setAttribute('readonly', 'readonly');
+        if(onFail) onFail();
+      }
+    };
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(ta.value).then(function(){ if(onOk) onOk(); }, fallback);
+      } else { fallback(); }
+    }catch(e){ fallback(); }
+  }
+  // ★ v7.0.3 服务需求单纯文本（依据计费区已勾选服务生成）
+  function buildServiceReqText(orderNo, dateStr){
+    var lines = [];
+    lines.push('【HR 服务需求单】' + orderNo);
+    lines.push('日期：' + dateStr);
+    lines.push('');
+    lines.push('一、服务需求清单');
+    var total = 0, n = 0;
+    // 注意：selectedServices 是 Set，Set 无 length 属性，
+    // 不能用 Array.prototype.slice.call 转数组（会得到空数组），须显式收集。
+    var idxList = [];
+    state.selectedServices.forEach(function(v){ idxList.push(v); });
+    idxList.sort(function(a, b){ return a - b; });
+    idxList.forEach(function(idx){
+      var s = QUOTE_SERVICES[idx];
+      if(!s) return;
+      n++;
+      var qty = state.serviceQuantities[idx] || 1;
+      var sub = (Number(s.price) || 0) * qty;
+      total += sub;
+      // 注意：formatPriceWithUnit 返回的是 HTML，纯文本需求单需另行拼接
+      var specTxt = String(s.spec || '').trim();
+      var priceTxt = (s.price == null || s.price === '')
+        ? '按需定制'
+        : ('¥' + s.price + (specTxt ? '/' + specTxt : ''));
+      lines.push(n + '. ' + (s.item || s.content) + '　× ' + qty + '　' +
+        priceTxt + '　小计 ¥' + fmt(sub, 0));
+    });
+    if(n === 0) lines.push('（尚未勾选任何服务）');
+    lines.push('');
+    lines.push('二、费用预估');
+    var feeType = state.feeType || 'total';
+    if(feeType === 'custom'){
+      lines.push('费用类型：自定义金额');
+      lines.push('金额：¥' + (state.customFee || '0'));
+    } else if(feeType === 'monthly'){
+      lines.push('费用类型：月度预估费用');
+      lines.push('金额：¥' + fmt(total / 12, 0) + '（' + n + ' 项服务 ÷ 12 月）');
+    } else {
+      lines.push('费用类型：服务报价总计');
+      lines.push('金额：¥' + fmt(total, 0) + '（已选 ' + n + ' 项服务）');
+    }
+    lines.push('');
+    lines.push('受理单位：中国人资服务处');
+    lines.push('说明：本单为服务需求登记，正式报价由人资部专家评估后单独提供。');
+    return lines.join('\n');
+  }
   function _escHtml(s){
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1886,7 +2037,8 @@
       '<div class="desc">' + _escHtml(d.desc) + '</div>' +
       '<div class="sec">二、委托与联系信息</div>' +
       '<table>' + trs + '</table>' +
-      '<div class="foot">说明：本单为专案需求登记，正式报价由 SDC 共享中心专家（Yuki / Queenie）评估后单独提供。</div>' +
+      '<div class="foot">受理单位：中国人资服务处<br>' +
+        '说明：本单为专案需求登记，正式报价由人资部专家评估后单独提供。</div>' +
       '</body></html>';
   }
 

@@ -308,7 +308,29 @@
   .spe-req-output{margin-top:12px;border-top:1px dashed #fcd34d;padding-top:12px;}
   .spe-req-output-head{font-size:12px;font-weight:700;color:#92400e;margin-bottom:7px;}
   .spe-req-output-text{width:100%;border:1px solid #e5e7eb;border-radius:7px;padding:10px 12px;font-size:11.5px;line-height:1.75;color:var(--text);background:#fcfcfd;resize:vertical;font-family:inherit;margin-bottom:8px;}
+  /* ★ v7.0.3 需求单操作按钮行（避免按钮被挤成窄条） */
+  .spe-req-output-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .spe-req-output-btn{padding:8px 18px !important;font-size:12px !important;border-radius:7px !important;white-space:nowrap;}
+  .spe-req-mailto{font-size:11px;color:#64748b;margin-left:2px;}
   @media (max-width:640px){ .spe-req-2col{grid-template-columns:1fr;} }
+
+  /* ★ v7.0.3 计费区「生成需求单 / 一键复制 / 发送邮件」 */
+  .svc-req-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;}
+  .svc-req-mini{padding:9px 18px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;
+    border:1.5px solid var(--svc-primary);background:#fff;color:var(--svc-primary);
+    transition:.2s;white-space:nowrap;font-family:inherit;}
+  .svc-req-mini:hover{background:#eef2ff;}
+  .svc-req-mini-primary{background:var(--svc-primary);color:#fff;border-style:solid;}
+  .svc-req-mini-primary:hover{background:#4338ca;color:#fff;}
+  .svc-req-hint{font-size:11.5px;color:var(--muted);}
+  .svc-req-hint-ok{color:#15803d;font-weight:600;}
+  .svc-req-hint-err{color:#dc2626;font-weight:600;}
+  .svc-req-output{margin-top:10px;border:1px dashed var(--svc-primary);border-radius:10px;
+    padding:12px 14px;background:#fafaff;}
+  .svc-req-output-head{font-size:12px;font-weight:700;color:var(--svc-primary);margin-bottom:8px;}
+  .svc-req-output-text{width:100%;border:1px solid #e5e7eb;border-radius:7px;padding:10px 12px;
+    font-size:11.5px;line-height:1.75;color:var(--text);background:#fff;resize:vertical;
+    font-family:inherit;margin-bottom:8px;}
 
   /* ★ v7.0 计费区空结果提示 */
   .svc-calc-empty{background:#fff8f8;border:1px dashed #fca5a5;border-radius:8px;padding:16px;margin-bottom:12px;font-size:13px;color:#b91c1c;text-align:center;line-height:1.7;}
