@@ -1613,11 +1613,11 @@
     var totalRight = el('div', 'svc-total-right'); totalBar.appendChild(totalRight);
     calcBodyHost.appendChild(totalBar);
 
-    // ★ v5.9：生成服务清单 PDF 按钮
-    var pdfBtn = el('button', 'svc-pdf-btn');
-    pdfBtn.innerHTML = '📄 生成服务清单 PDF';
-    pdfBtn.addEventListener('click', generateServiceQuotePDF);
-    calcBodyHost.appendChild(pdfBtn);
+    // ★ v7.0.7 移除独立的「生成服务清单 PDF」虚线按钮（需求单表单已含「导出 PDF」，此处冗余），
+    //   原位改为服务时效承诺文案
+    var slaNote = el('div', 'svc-sla-note');
+    slaNote.innerHTML = '🕐 提交服务需求后，我们将在 <b>24 小时内</b>与您联系，确认服务方案与交付安排';
+    calcBodyHost.appendChild(slaNote);
 
     // ★ v7.0.3：生成需求单 / 一键复制 / 发送邮件（收件邮箱固定 REQ_MAIL_TO）
     // ★ v7.0.5：与「专案需求单」同构 —— 需求内容自动代入上方已勾选服务、预算报价自动带入上方加总价格，
@@ -1971,6 +1971,10 @@
     // ★ v7.0.5 同步服务需求单表单的「预算报价」（只读，自动带入上方加总价格）
     var _quoteBox = document.getElementById('svcReqQuote');
     if (_quoteBox) _quoteBox.value = _svcQuoteText();
+    // ★ v7.0.7 同步「需求内容」（只读，自动代入上方已勾选服务）
+    //   修复：勾选/取消服务后需求内容不刷新的问题（此前只在渲染/生成时写入一次）
+    var _descBox = document.getElementById('svcReqDesc');
+    if (_descBox) _descBox.value = _svcReqContentDigest();
     var totalRight = document.querySelector('.svc-total-right'); if (!totalRight) return;
     var displayVal = '', displaySub = '';
     if (feeType === 'custom') { displayVal = '¥' + (state.customFee || '0'); displaySub = '自定义金额'; }
