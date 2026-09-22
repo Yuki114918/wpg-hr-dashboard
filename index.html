@@ -4,7 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CN 区 HR 服务指标分析 · 工作量仪表板 v5</title>
-<script src="echarts.min.js"></script>
+<!-- ★ v7.0.9 第三方库改走 jsdelivr CDN（国内可达，实测 2.6MB/s；GitHub Pages 仅 ~26KB/s）。
+     本地同名文件保留为同步兜底：CDN 不可达时 document.write 注入本地脚本（同源，安全）。
+     已校验 sha256：echarts 42f8329d989b6f65(5.5.0) / jspdf 85ba2cc3ff858a20(2.5.2) 与本地逐字节一致。 -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>window.echarts||document.write('<script src="echarts.min.js"><\/script>');</script>
 <script src="hr_data.js"></script>
 <script src="quote_data.js"></script>
 <style>
@@ -526,7 +530,8 @@
     <div id="page-advisor" class="page" style="display:none;"></div>
   </main>
 </div>
-<script src="jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script>window.jspdf||document.write('<script src="jspdf.umd.min.js"><\/script>');</script>
 <script src="app.js"></script>
 </body>
 </html>
