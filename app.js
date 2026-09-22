@@ -1354,6 +1354,7 @@
     // ★ v7.0 专案专家（Chris / Roc）：单一专案内容，不适用标准报价单
     if(isProjExpert) {
       var projExp = getExpertInfo(state.advisorPerson);
+      var _speNo = _reqOrderNo();
       var projNotice = el('div', 'svc-project-expert-notice');
       projNotice.innerHTML =
         '<div class="spe-notice-head">' + projExp.icon + ' ' + projExp.name + ' · ' + projExp.role + '</div>' +
@@ -1361,7 +1362,160 @@
           '该专家提供的是 <b>单一专案内容</b>，<b>价格另算</b>，不适用下方标准报价单。<br>' +
           '如需其他业务报价，请联系 <b>SDC 共享中心专家（Yuki / Queenie）</b> 获取对应方案与单独报价。' +
         '</div>' +
+        // ★ v7.0.2 专案需求填写栏
+        '<div class="spe-req-form">' +
+          '<div class="spe-req-title">📝 填写专案需求 — 提交后由 SDC 共享中心专家评估并单独报价</div>' +
+          '<div class="spe-req-row">' +
+            '<label class="spe-req-label" for="speReqDesc">专案需求说明<i class="spe-req-need">必填</i></label>' +
+            '<textarea id="speReqDesc" class="spe-req-input spe-req-textarea" rows="3" placeholder="请描述需要的专案内容，例如：年度人才盘点与组织架构优化、关键岗位招聘专案…"></textarea>' +
+          '</div>' +
+          '<div class="spe-req-2col">' +
+            '<div class="spe-req-row">' +
+              '<label class="spe-req-label" for="speReqName">联系人<i class="spe-req-need">必填</i></label>' +
+              '<input type="text" id="speReqName" class="spe-req-input" placeholder="您的姓名" />' +
+            '</div>' +
+            '<div class="spe-req-row">' +
+              '<label class="spe-req-label" for="speReqContact">联系方式<i class="spe-req-need">必填</i></label>' +
+              '<input type="text" id="speReqContact" class="spe-req-input" placeholder="电话 / 邮箱" />' +
+            '</div>' +
+          '</div>' +
+          '<div class="spe-req-2col">' +
+            '<div class="spe-req-row">' +
+              '<label class="spe-req-label" for="speReqDue">期望交付时间</label>' +
+              '<input type="date" id="speReqDue" class="spe-req-input" />' +
+            '</div>' +
+            '<div class="spe-req-row">' +
+              '<label class="spe-req-label" for="speReqBudget">预算范围 / 备注</label>' +
+              '<input type="text" id="speReqBudget" class="spe-req-input" placeholder="如：预算 5–10 万，或补充说明" />' +
+            '</div>' +
+          '</div>' +
+          '<div class="spe-req-actions">' +
+            '<button class="spe-req-btn spe-req-btn-primary" type="button" id="speReqSubmit">生成需求单</button>' +
+            '<button class="spe-req-btn spe-req-btn-ghost" type="button" id="speReqExport">导出 PDF</button>' +
+            '<button class="mini-btn spe-req-btn-clear" type="button" id="speReqReset">清空</button>' +
+            '<span class="spe-req-hint" id="speReqHint"></span>' +
+          '</div>' +
+          '<div class="spe-req-output" id="speReqOutput" style="display:none;">' +
+            '<div class="spe-req-output-head">📄 专案需求单（可复制后发给 SDC 专家）</div>' +
+            '<textarea id="speReqOutputText" class="spe-req-output-text" rows="10" readonly></textarea>' +
+            '<button class="mini-btn" type="button" id="speReqCopy">📋 一键复制</button>' +
+          '</div>' +
+        '</div>' +
         '<button class="land-btn land-btn-primary spe-notice-btn" type="button">👥 联系 SDC 共享中心专家 →</button>';
+
+      // ---- v7.0.2 专案需求填写栏交互 ----
+      var _rDesc = projNotice.querySelector('#speReqDesc');
+      var _rName = projNotice.querySelector('#speReqName');
+      var _rContact = projNotice.querySelector('#speReqContact');
+      var _rDue = projNotice.querySelector('#speReqDue');
+      var _rBudget = projNotice.querySelector('#speReqBudget');
+      var _rHint = projNotice.querySelector('#speReqHint');
+      var _rOutput = projNotice.querySelector('#speReqOutput');
+      var _rOutText = projNotice.querySelector('#speReqOutputText');
+
+      function _speHint(msg, kind){
+        _rHint.textContent = msg || '';
+        _rHint.className = 'spe-req-hint' + (kind ? ' spe-req-hint-' + kind : '');
+      }
+      function _speCollect(){
+        return {
+          desc: (_rDesc.value || '').trim(),
+          name: (_rName.value || '').trim(),
+          contact: (_rContact.value || '').trim(),
+          due: (_rDue.value || '').trim(),
+          budget: (_rBudget.value || '').trim()
+        };
+      }
+      // 校验：返回空串表示通过
+      function _speCheck(d){
+        if(!d.desc) return '请填写「专案需求说明」';
+        if(!d.name) return '请填写「联系人」';
+        if(!d.contact) return '请填写「联系方式」';
+        return '';
+      }
+      function _speFocusByErr(err){
+        if(err.indexOf('说明') > -1) _rDesc.focus();
+        else if(err.indexOf('联系人') > -1) _rName.focus();
+        else _rContact.focus();
+      }
+      // 生成需求单纯文本
+      function _speBuildText(d){
+        var exp = getExpertInfo(state.advisorPerson);
+        return [
+          '【专案需求单】' + _speNo,
+          '日期：' + _todayCN(),
+          '委托专家：' + exp.name + '（' + exp.role + '）',
+          '计费方式：单一专案内容，价格另算',
+          '',
+          '一、专案需求说明',
+          d.desc,
+          '',
+          '二、委托与联系信息',
+          '联系人：' + d.name,
+          '联系方式：' + d.contact,
+          '期望交付时间：' + _cnDate(d.due),
+          '预算范围 / 备注：' + (d.budget || '待确认'),
+          '',
+          '受理单位：大联大控股 · HR 共享服务中心（SDC）',
+          '说明：本单为专案需求登记，正式报价由 SDC 共享中心专家（Yuki / Queenie）评估后单独提供。'
+        ].join('\n');
+      }
+      // 生成需求单
+      projNotice.querySelector('#speReqSubmit').addEventListener('click', function(){
+        var d = _speCollect();
+        var err = _speCheck(d);
+        if(err){ _speHint('⚠️ ' + err, 'err'); _speFocusByErr(err); return; }
+        _rOutText.value = _speBuildText(d);
+        _rOutput.style.display = 'block';
+        _speHint('✔ 需求单已生成，可复制或导出 PDF', 'ok');
+      });
+      // 一键复制
+      projNotice.querySelector('#speReqCopy').addEventListener('click', function(){
+        var btn = this;
+        var txt = _rOutText.value;
+        if(!txt){ _speHint('⚠️ 请先点击「生成需求单」', 'err'); return; }
+        var onOk = function(){
+          btn.textContent = '✔ 已复制';
+          _speHint('✔ 已复制到剪贴板，可粘贴发送给 SDC 专家', 'ok');
+          setTimeout(function(){ btn.textContent = '📋 一键复制'; }, 1600);
+        };
+        var fallback = function(){
+          try{
+            _rOutText.removeAttribute('readonly');
+            _rOutText.select();
+            document.execCommand('copy');
+            _rOutText.setAttribute('readonly', 'readonly');
+            onOk();
+          }catch(e){
+            _rOutText.setAttribute('readonly', 'readonly');
+            _speHint('⚠️ 复制失败，请手动全选复制', 'err');
+          }
+        };
+        try{
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(txt).then(onOk, fallback);
+          } else { fallback(); }
+        }catch(e){ fallback(); }
+      });
+      // 清空
+      projNotice.querySelector('#speReqReset').addEventListener('click', function(){
+        _rDesc.value = ''; _rName.value = ''; _rContact.value = ''; _rDue.value = ''; _rBudget.value = '';
+        _rOutText.value = ''; _rOutput.style.display = 'none';
+        _speHint('已清空');
+      });
+      // 导出 PDF：走打印窗口（jsPDF 内置字体无中文字形，直接生成会乱码）
+      projNotice.querySelector('#speReqExport').addEventListener('click', function(){
+        var d = _speCollect();
+        var err = _speCheck(d);
+        if(err){ _speHint('⚠️ ' + err, 'err'); _speFocusByErr(err); return; }
+        var html = buildProjectReqPrintHTML(d, getExpertInfo(state.advisorPerson), _speNo, _todayCN());
+        var pw = window.open('', '_blank');
+        if(!pw){ _speHint('⚠️ 浏览器拦截了打印窗口，请允许弹窗后重试', 'err'); return; }
+        pw.document.write(html);
+        pw.document.close();
+        _speHint('✔ 已打开打印窗口，请选择「另存为 PDF」', 'ok');
+      });
+
       projNotice.querySelector('.spe-notice-btn').addEventListener('click', function(){
         state.advisorPerson = 'Yuki';
         state.svcModule = 'all';
@@ -1532,13 +1686,17 @@
     var cardsArea = el('div', 'svc-cards-area'); cardsArea.id = 'svc_cards'; wrap.appendChild(cardsArea);
     renderServiceCards();
 
-    // 底部联动图表
-    wrap.appendChild(el('div', 'section-title', '🔗 服务 ↔ 负责人员 联动'));
-    var linkGrid = el('div', 'chart-grid');
-    linkGrid.appendChild(chartBox('svc_module_hours', '各服务模块对应 HR 工时分布'));
-    linkGrid.appendChild(chartBox('svc_person_svc', '各 HR 人员主要服务领域'));
-    wrap.appendChild(linkGrid);
-    drawServiceLinkCharts();
+    // ★ v7.0.2 底部联动图表 —— 仅查看「顾问」时显示；查看专家团队时隐藏
+    //   专家（SDC 共享中心专家 / 专案专家）的职责口径与「全 HR 工时分布」无关，
+    //   显示反而干扰阅读，故选中专家时不渲染该区块。
+    if (!getExpertInfo(state.advisorPerson)) {
+      wrap.appendChild(el('div', 'section-title', '🔗 服务 ↔ 负责人员 联动'));
+      var linkGrid = el('div', 'chart-grid');
+      linkGrid.appendChild(chartBox('svc_module_hours', '各服务模块对应 HR 工时分布'));
+      linkGrid.appendChild(chartBox('svc_person_svc', '各 HR 人员主要服务领域'));
+      wrap.appendChild(linkGrid);
+      drawServiceLinkCharts();
+    }
   }
 
   function renderServiceCards() {
@@ -1656,6 +1814,82 @@
   }
 
   // ========== v5.9：生成服务报价清单 PDF ==========
+  // ★ v7.0.2 专案需求单相关工具
+  //   为什么「导出 PDF」走打印窗口而不是 jsPDF：
+  //   jsPDF 内置字体仅 Helvetica 等 14 种西文字体，无中文字形，直接 doc.text('中文') 会乱码/丢字。
+  //   项目内也没有可嵌入的中文 TTF（需数 MB 字体文件）。故改为生成可打印 HTML，
+  //   由浏览器渲染中文字形 → 用户在打印对话框选「另存为 PDF」，输出为矢量文字、清晰且无乱码。
+  function _cnDate(v){
+    if(!v) return '待确认';
+    var p = String(v).split('-');
+    if(p.length !== 3) return String(v);
+    return p[0] + '年' + parseInt(p[1], 10) + '月' + parseInt(p[2], 10) + '日';
+  }
+  function _todayCN(){
+    var t = new Date();
+    return t.getFullYear() + '年' + (t.getMonth() + 1) + '月' + t.getDate() + '日';
+  }
+  function _reqOrderNo(){
+    var t = new Date();
+    return 'WPG-HR-PRJ-' + t.getFullYear() +
+      String(t.getMonth() + 1).padStart(2, '0') +
+      String(t.getDate()).padStart(2, '0') + '-' +
+      String(Math.floor(Math.random() * 9000) + 1000);
+  }
+  function _escHtml(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  // 生成可打印的专案需求单 HTML
+  function buildProjectReqPrintHTML(d, exp, orderNo, dateStr){
+    var rows = [
+      ['委托专家', _escHtml(exp.name) + '（' + _escHtml(exp.role) + '）'],
+      ['计费方式', '单一专案内容，价格另算'],
+      ['联系人', _escHtml(d.name)],
+      ['联系方式', _escHtml(d.contact)],
+      ['期望交付时间', _escHtml(_cnDate(d.due))],
+      ['预算范围 / 备注', _escHtml(d.budget || '待确认')]
+    ];
+    var trs = rows.map(function(r){
+      return '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>';
+    }).join('');
+    return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">' +
+      '<title>' + _escHtml(orderNo) + ' 专案需求单</title><style>' +
+      '*{box-sizing:border-box;}' +
+      'body{font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC",sans-serif;' +
+        'color:#1e293b;margin:0;padding:34px 42px;}' +
+      '.noprint{margin-bottom:18px;}' +
+      '.noprint button{padding:10px 24px;font-size:13px;border-radius:8px;border:none;' +
+        'background:#f59e0b;color:#fff;font-weight:700;cursor:pointer;}' +
+      '.band{height:6px;background:linear-gradient(90deg,#f59e0b,#fcd34d);border-radius:3px;margin-bottom:20px;}' +
+      'h1{font-size:25px;margin:0 0 6px;color:#0f172a;letter-spacing:2px;}' +
+      '.sub{font-size:12.5px;color:#64748b;margin-bottom:18px;}' +
+      '.meta{font-size:12.5px;color:#475569;margin-bottom:24px;}' +
+      '.meta b{color:#0f172a;}' +
+      '.sec{font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 9px;padding-left:9px;border-left:4px solid #f59e0b;}' +
+      '.desc{border:1px solid #e2e8f0;border-radius:6px;padding:13px 15px;font-size:13px;line-height:1.9;' +
+        'white-space:pre-wrap;word-break:break-word;margin-bottom:24px;background:#fffdf7;min-height:64px;}' +
+      'table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;}' +
+      'th{width:150px;text-align:left;background:#f8fafc;color:#475569;font-weight:600;' +
+        'padding:10px 13px;border:1px solid #e2e8f0;vertical-align:top;}' +
+      'td{padding:10px 13px;border:1px solid #e2e8f0;white-space:pre-wrap;word-break:break-word;}' +
+      '.foot{font-size:11.5px;color:#64748b;line-height:1.85;border-top:1px dashed #cbd5e1;padding-top:14px;}' +
+      '@page{margin:12mm;}' +
+      '@media print{.noprint{display:none;} body{padding:0;}}' +
+      '</style></head><body>' +
+      '<div class="noprint"><button onclick="window.print()">🖨️ 打印 / 另存为 PDF</button></div>' +
+      '<div class="band"></div>' +
+      '<h1>专案需求单</h1>' +
+      '<div class="sub">大联大控股 · HR 共享服务中心（SDC）</div>' +
+      '<div class="meta">单号：<b>' + _escHtml(orderNo) + '</b> &nbsp;|&nbsp; 日期：<b>' + _escHtml(dateStr) + '</b></div>' +
+      '<div class="sec">一、专案需求说明</div>' +
+      '<div class="desc">' + _escHtml(d.desc) + '</div>' +
+      '<div class="sec">二、委托与联系信息</div>' +
+      '<table>' + trs + '</table>' +
+      '<div class="foot">说明：本单为专案需求登记，正式报价由 SDC 共享中心专家（Yuki / Queenie）评估后单独提供。</div>' +
+      '</body></html>';
+  }
+
   function generateServiceQuotePDF() {
     if (!window.jspdf || !window.jspdf.jsPDF) { alert('PDF 库未加载，请刷新页面重试'); return; }
     if (state.selectedServices.size === 0) { alert('请先勾选至少一项服务再生成清单'); return; }
